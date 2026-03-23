@@ -1,0 +1,31 @@
+:root {
+  --bg-deep: #060a10;
+  --bg-primary: #0b1120;
+  --bg-surface: #111b2e;
+  --bg-card: #152238;
+  --bg-card-hover: #1a2a45;
+  --bg-elevated: #1e3350;
+  --accent: #00e68a;
+  --accent-dim: #00b36b;
+  --accent-glow: rgba(0, 230, 138, 0.15);
+  --accent-glow-strong: rgba(0, 230, 138, 0.3);
+  --accent-secondary: #00c4ff;
+  --accent-tertiary: #a855f7;
+  --text-primary: #e8ecf4;
+  --text-secondary: #8c99b0;
+  --text-muted: #566380;
+  --border: #1e2d48;
+  --border-light: #2a3d5c;
+  --danger: #ff4757;
+  --warning: #ffa726;
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Outfit', sans-serif;
+  --font-accent: 'Crimson Pro', serif;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --transition-fast: 0.15s ease;
+  --transition-med: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}

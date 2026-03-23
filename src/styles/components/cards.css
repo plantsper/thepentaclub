@@ -1,0 +1,189 @@
+.card-showcase {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.tcg-card {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  transition: all var(--transition-med);
+  cursor: pointer;
+  aspect-ratio: 3/4.2;
+}
+
+.tcg-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px var(--accent-glow);
+  border-color: var(--accent);
+}
+
+.tcg-card__art {
+  width: 100%;
+  height: 65%;
+  position: relative;
+  overflow: hidden;
+}
+
+.tcg-card__art-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--transition-slow);
+}
+
+.tcg-card:hover .tcg-card__art-bg {
+  transform: scale(1.08);
+}
+
+.tcg-card__rarity {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tcg-card__rarity--legendary {
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  color: #1a0a00;
+}
+
+.tcg-card__rarity--epic {
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  color: #fff;
+}
+
+.tcg-card__rarity--rare {
+  background: linear-gradient(135deg, #00c4ff, #0088cc);
+  color: #001a2e;
+}
+
+.tcg-card__rarity--common {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.tcg-card__info {
+  padding: 14px 16px;
+}
+
+.tcg-card__name {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.tcg-card__type {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.tcg-card__stats-row {
+  display: flex;
+  gap: 12px;
+}
+
+.tcg-card__stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tcg-card__stat--atk {
+  color: #ff6b6b;
+}
+
+.tcg-card__stat--def {
+  color: #4ecdc4;
+}
+
+.tcg-card__stat--mana {
+  color: #a855f7;
+}
+
+.tcg-card__mana-cost {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.9), rgba(124, 58, 237, 0.9));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.4);
+}
+
+.cards-toolbar {
+  max-width: 1100px;
+  margin: 0 auto 32px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cards-toolbar__search {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 16px 10px 40px;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color var(--transition-fast);
+  outline: none;
+}
+
+.cards-toolbar__search:focus {
+  border-color: var(--accent);
+}
+
+.cards-toolbar__search::placeholder {
+  color: var(--text-muted);
+}
+
+.filter-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.filter-btn:hover,
+.filter-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--text-muted);
+  font-size: 16px;
+}

@@ -1,0 +1,52 @@
+import { Component } from '../base/Component';
+import type { ICard, ICardCollection, IEventEmitter } from '../../types';
+
+export class CardGridComponent extends Component {
+  #collection: ICardCollection;
+
+  constructor(container: HTMLElement, collection: ICardCollection, _events: IEventEmitter) {
+    super(container);
+    this.#collection = collection;
+  }
+
+  render(): string {
+    return `
+      <section class="section" id="preview">
+        <div class="section__header">
+          <div class="section__label">Preview</div>
+          <h2 class="section__title">Featured Cards</h2>
+          <p class="section__desc">A glimpse into the Riftbound universe. Hundreds more await.</p>
+        </div>
+        <div class="card-showcase" id="cardShowcase">
+          ${this.#renderCards(this.#collection.all.slice(0, 8))}
+        </div>
+      </section>
+    `;
+  }
+
+  #renderCards(cards: ICard[]): string {
+    return cards.map((card, i) => `
+      <div class="tcg-card stagger-in" style="transition-delay:${i * 0.06}s" data-card-id="${card.id}">
+        <div class="tcg-card__art">
+          <div class="tcg-card__art-bg" style="width:100%;height:100%;background:${card.artGradient}"></div>
+          <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
+          <span class="tcg-card__mana-cost">${card.manaCost}</span>
+        </div>
+        <div class="tcg-card__info">
+          <div class="tcg-card__name">${card.name}</div>
+          <div class="tcg-card__type">${card.type} &mdash; ${card.set}</div>
+          <div class="tcg-card__stats-row">
+            <span class="tcg-card__stat tcg-card__stat--atk">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14.7 2.3a1 1 0 0 0-1.4 0l-4.6 4.6L6 4.2a1 1 0 0 0-1.4 0L2.3 6.5a1 1 0 0 0 0 1.4L5 10.6l-2.3 2.3a1 1 0 0 0 0 1.4l6 6a1 1 0 0 0 1.4 0l2.3-2.3 2.7 2.7a1 1 0 0 0 1.4 0l2.3-2.3a1 1 0 0 0 0-1.4L16.1 14.3l4.6-4.6a1 1 0 0 0 0-1.4l-6-6z"/></svg>
+              ${card.attack}
+            </span>
+            <span class="tcg-card__stat tcg-card__stat--def">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+              ${card.defense}
+            </span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+}
