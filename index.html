@@ -518,9 +518,9 @@ class Router {
   constructor(onNavigate) {
     this.#onNavigate = onNavigate;
     window.addEventListener('hashchange', () => this.#handleRoute());
-    window.addEventListener('load', () => this.#handleRoute());
   }
   register(path, handler) { this.#routes.set(path, handler); return this; }
+  start() { this.#handleRoute(); return this; }
   navigate(path) {
     window.location.hash = path;
   }
@@ -528,9 +528,9 @@ class Router {
   #handleRoute() {
     const hash = window.location.hash.slice(1) || '/';
     this.#currentRoute = hash;
+    if (this.#onNavigate) this.#onNavigate(hash);
     const handler = this.#routes.get(hash);
     if (handler) handler();
-    if (this.#onNavigate) this.#onNavigate(hash);
   }
 }
 
@@ -1078,7 +1078,8 @@ class App {
     this.#router
       .register('/', () => this.#showHome())
       .register('/cards', () => this.#showCards())
-      .register('/about', () => this.#showAbout());
+      .register('/about', () => this.#showAbout())
+      .start();
   }
 
   #onNavigate(route) {
