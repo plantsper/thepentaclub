@@ -3,12 +3,14 @@ import type { ICard, ICardCollection, IEventEmitter, CardRarity } from '../../ty
 
 export class CardsPageComponent extends Component {
   #collection: ICardCollection;
+  #events: IEventEmitter;
   #activeRarity: CardRarity | 'all' = 'all';
   #searchQuery: string = '';
 
-  constructor(container: HTMLElement, collection: ICardCollection, _events: IEventEmitter) {
+  constructor(container: HTMLElement, collection: ICardCollection, events: IEventEmitter) {
     super(container);
     this.#collection = collection;
+    this.#events = events;
   }
 
   render(): string {
@@ -37,6 +39,13 @@ export class CardsPageComponent extends Component {
 
   afterMount(): void {
     this.#renderGrid();
+
+    document.getElementById('cardsGrid')?.addEventListener('click', (e) => {
+      const card = (e.target as HTMLElement).closest<HTMLElement>('.tcg-card');
+      if (!card) return;
+      const found = this.#collection.all.find(c => c.id === card.dataset.cardId);
+      if (found) this.#events.emit('card:open', found);
+    });
 
     const searchInput = document.getElementById('cardSearch') as HTMLInputElement | null;
     searchInput?.addEventListener('input', (e) => {

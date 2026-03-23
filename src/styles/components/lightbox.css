@@ -1,0 +1,259 @@
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-med);
+}
+
+.lightbox.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.lightbox__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 10, 16, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.lightbox__dialog {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  width: 100%;
+  max-width: 680px;
+  max-height: 88vh;
+  transform: scale(0.94) translateY(16px);
+  transition: transform var(--transition-med);
+  box-shadow:
+    0 40px 80px rgba(0, 0, 0, 0.7),
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 0 60px rgba(0, 230, 138, 0.06);
+}
+
+.lightbox.open .lightbox__dialog {
+  transform: scale(1) translateY(0);
+}
+
+.lightbox__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(6, 10, 16, 0.55);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.lightbox__close:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  transform: rotate(90deg);
+}
+
+/* ── Art panel ── */
+
+.lightbox__art {
+  position: relative;
+  min-height: 380px;
+  transition: background var(--transition-slow);
+}
+
+.lightbox__art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(17, 27, 46, 0.5) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.lightbox__mana {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.95), rgba(124, 58, 237, 0.95));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.55);
+}
+
+.lightbox__art .tcg-card__rarity {
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  font-size: 11px;
+  padding: 4px 12px;
+}
+
+/* ── Body panel ── */
+
+.lightbox__body {
+  padding: 32px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.lightbox__set {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+}
+
+.lightbox__name {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.lightbox__type-line {
+  display: flex;
+  gap: 8px;
+}
+
+.lightbox__type-badge {
+  padding: 3px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lightbox__desc {
+  font-family: var(--font-accent);
+  font-size: 16px;
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.75;
+  margin: 0;
+  flex: 1;
+}
+
+/* ── Stats ── */
+
+.lightbox__stats {
+  display: flex;
+  gap: 10px;
+}
+
+.lightbox__stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 8px 12px;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.lightbox__stat span {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.lightbox__stat label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.lightbox__stat--atk { color: #ff6b6b; }
+.lightbox__stat--def { color: #4ecdc4; }
+.lightbox__stat--mana { color: #a855f7; }
+
+/* ── Rarity bar ── */
+
+.lightbox__rarity-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+  margin-top: auto;
+}
+
+.lightbox__rarity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Mobile ── */
+
+@media (max-width: 580px) {
+  .lightbox {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .lightbox__dialog {
+    grid-template-columns: 1fr;
+    grid-template-rows: 200px 1fr;
+    max-height: 92vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    transform: translateY(24px);
+  }
+
+  .lightbox.open .lightbox__dialog {
+    transform: translateY(0);
+  }
+
+  .lightbox__art {
+    min-height: 200px;
+  }
+
+  .lightbox__body {
+    padding: 24px 20px 28px;
+  }
+
+  .lightbox__name {
+    font-size: 20px;
+  }
+}

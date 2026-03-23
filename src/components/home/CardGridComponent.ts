@@ -3,10 +3,26 @@ import type { ICard, ICardCollection, IEventEmitter } from '../../types';
 
 export class CardGridComponent extends Component {
   #collection: ICardCollection;
+  #events: IEventEmitter;
 
-  constructor(container: HTMLElement, collection: ICardCollection, _events: IEventEmitter) {
+  constructor(container: HTMLElement, collection: ICardCollection, events: IEventEmitter) {
     super(container);
     this.#collection = collection;
+    this.#events = events;
+  }
+
+  afterMount(): void {
+    const showcase = document.getElementById('cardShowcase');
+    showcase?.addEventListener('click', (e) => {
+      const card = (e.target as HTMLElement).closest<HTMLElement>('.tcg-card');
+      if (!card) return;
+      const found = this.#collection.all.find(c => c.id === card.dataset.cardId);
+      if (found) this.#events.emit('card:open', found);
+    });
+
+    requestAnimationFrame(() => {
+      document.querySelectorAll('#cardShowcase .stagger-in').forEach(el => el.classList.add('visible'));
+    });
   }
 
   render(): string {

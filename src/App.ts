@@ -10,6 +10,7 @@ import { CardGridComponent } from './components/home/CardGridComponent';
 import { CTAComponent } from './components/home/CTAComponent';
 import { CardsPageComponent } from './components/pages/CardsPageComponent';
 import { AboutPageComponent } from './components/pages/AboutPageComponent';
+import { CardLightboxComponent } from './components/shared/CardLightboxComponent';
 import { ScrollAnimator } from './utils/ScrollAnimator';
 import { createSampleCards } from './utils/sampleData';
 import type { IStat, IFeature } from './types';
@@ -50,6 +51,7 @@ export class App {
       <div id="page-cards" class="page"></div>
       <div id="page-about" class="page"></div>
       <div id="footerMount"></div>
+      <div id="lightboxMount"></div>
     `;
 
     // Mount nav & footer
@@ -63,6 +65,11 @@ export class App {
 
     if (footerMount) {
       new FooterComponent(footerMount).mount();
+    }
+
+    const lightboxMount = document.getElementById('lightboxMount');
+    if (lightboxMount) {
+      new CardLightboxComponent(lightboxMount, this.#events).mount();
     }
 
     // Register routes and start router

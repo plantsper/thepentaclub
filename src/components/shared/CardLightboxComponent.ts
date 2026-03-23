@@ -1,0 +1,100 @@
+import { Component } from '../base/Component';
+import type { ICard, IEventEmitter } from '../../types';
+
+export class CardLightboxComponent extends Component {
+  #events: IEventEmitter;
+
+  constructor(container: HTMLElement, events: IEventEmitter) {
+    super(container);
+    this.#events = events;
+  }
+
+  render(): string {
+    return `
+      <div class="lightbox" id="cardLightbox">
+        <div class="lightbox__backdrop" id="lightboxBackdrop"></div>
+        <div class="lightbox__dialog" role="dialog" aria-modal="true">
+          <button class="lightbox__close" id="lightboxClose" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+          <div class="lightbox__art" id="lightboxArt"></div>
+          <div class="lightbox__body" id="lightboxBody"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  afterMount(): void {
+    document.getElementById('lightboxBackdrop')?.addEventListener('click', () => this.#close());
+    document.getElementById('lightboxClose')?.addEventListener('click', () => this.#close());
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.#close();
+    });
+    this.#events.on<ICard>('card:open', (card) => this.#open(card));
+  }
+
+  #open(card: ICard): void {
+    const lightbox = document.getElementById('cardLightbox');
+    const art = document.getElementById('lightboxArt');
+    const body = document.getElementById('lightboxBody');
+    if (!lightbox || !art || !body) return;
+
+    art.style.background = card.artGradient;
+    art.innerHTML = `
+      <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
+      <span class="lightbox__mana">${card.manaCost}</span>
+    `;
+
+    const rarityColors: Record<string, string> = {
+      Legendary: '#ffd700',
+      Epic: '#a855f7',
+      Rare: '#00c4ff',
+      Common: '#566380',
+    };
+    const rc = rarityColors[card.rarity] ?? '#566380';
+
+    const atkDisplay = card.attack > 0 ? card.attack : '—';
+    const defDisplay = card.defense > 0 ? card.defense : '—';
+
+    body.innerHTML = `
+      <div class="lightbox__set">${card.set}</div>
+      <h2 class="lightbox__name">${card.name}</h2>
+      <div class="lightbox__type-line">
+        <span class="lightbox__type-badge">${card.type}</span>
+      </div>
+      <p class="lightbox__desc">${card.description}</p>
+      <div class="lightbox__stats">
+        <div class="lightbox__stat lightbox__stat--atk">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14.7 2.3a1 1 0 0 0-1.4 0l-4.6 4.6L6 4.2a1 1 0 0 0-1.4 0L2.3 6.5a1 1 0 0 0 0 1.4L5 10.6l-2.3 2.3a1 1 0 0 0 0 1.4l6 6a1 1 0 0 0 1.4 0l2.3-2.3 2.7 2.7a1 1 0 0 0 1.4 0l2.3-2.3a1 1 0 0 0 0-1.4L16.1 14.3l4.6-4.6a1 1 0 0 0 0-1.4l-6-6z"/></svg>
+          <span>${atkDisplay}</span>
+          <label>Attack</label>
+        </div>
+        <div class="lightbox__stat lightbox__stat--def">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+          <span>${defDisplay}</span>
+          <label>Defense</label>
+        </div>
+        <div class="lightbox__stat lightbox__stat--mana">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          <span>${card.manaCost}</span>
+          <label>Mana</label>
+        </div>
+      </div>
+      <div class="lightbox__rarity-bar" style="background:${rc}18;border-color:${rc}40">
+        <span class="lightbox__rarity-dot" style="background:${rc}"></span>
+        <span style="color:${rc};font-weight:600;font-size:13px">${card.rarity}</span>
+        <span style="color:var(--text-muted);font-size:13px;margin-left:auto">${card.set}</span>
+      </div>
+    `;
+
+    lightbox.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  #close(): void {
+    document.getElementById('cardLightbox')?.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+}
