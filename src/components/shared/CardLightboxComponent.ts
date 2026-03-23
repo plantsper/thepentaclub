@@ -45,30 +45,24 @@ export class CardLightboxComponent extends Component {
       art.style.background = '';
       art.innerHTML = `
         <img class="lightbox__art-img" src="${card.artUrl}" alt="${card.name}">
-        <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
+        <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity.name}</span>
         <span class="lightbox__mana">${card.manaCost}</span>
       `;
     } else {
       art.style.background = card.artGradient;
       art.innerHTML = `
-        <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
+        <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity.name}</span>
         <span class="lightbox__mana">${card.manaCost}</span>
       `;
     }
 
-    const rarityColors: Record<string, string> = {
-      Legendary: '#ffd700',
-      Epic: '#a855f7',
-      Rare: '#00c4ff',
-      Common: '#566380',
-    };
-    const rc = rarityColors[card.rarity] ?? '#566380';
+    const rc = card.rarity.colorHex;
 
     const atkDisplay = card.attack > 0 ? card.attack : '—';
     const defDisplay = card.defense > 0 ? card.defense : '—';
 
     body.innerHTML = `
-      <div class="lightbox__set">${card.set}</div>
+      <div class="lightbox__set">${card.set.name}</div>
       <h2 class="lightbox__name">${card.name}</h2>
       <div class="lightbox__type-line">
         <span class="lightbox__type-badge">${card.type}</span>
@@ -93,8 +87,8 @@ export class CardLightboxComponent extends Component {
       </div>
       <div class="lightbox__rarity-bar" style="background:${rc}18;border-color:${rc}40">
         <span class="lightbox__rarity-dot" style="background:${rc}"></span>
-        <span style="color:${rc};font-weight:600;font-size:13px">${card.rarity}</span>
-        <span style="color:var(--text-muted);font-size:13px;margin-left:auto">${card.set}</span>
+        <span style="color:${rc};font-weight:600;font-size:13px">${card.rarity.name}</span>
+        <span style="color:var(--text-muted);font-size:13px;margin-left:auto">${card.set.name}</span>
       </div>
     `;
 

@@ -1,10 +1,10 @@
 import { Component } from '../base/Component';
-import type { ICard, ICardCollection, IEventEmitter, CardRarity } from '../../types';
+import type { ICard, ICardCollection, IEventEmitter } from '../../types';
 
 export class CardsPageComponent extends Component {
   #collection: ICardCollection;
   #events: IEventEmitter;
-  #activeRarity: CardRarity | 'all' = 'all';
+  #activeRarity: string = 'all';
   #searchQuery: string = '';
 
   constructor(container: HTMLElement, collection: ICardCollection, events: IEventEmitter) {
@@ -14,6 +14,15 @@ export class CardsPageComponent extends Component {
   }
 
   render(): string {
+    // Derive unique rarities sorted by sortOrder for filter buttons
+    const rarities = [...new Map(
+      this.#collection.all.map(c => [c.rarity.id, c.rarity])
+    ).values()].sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const rarityButtons = rarities.map(r =>
+      `<button class="filter-btn" data-rarity="${r.name}">${r.name}</button>`
+    ).join('');
+
     return `
       <div class="section" style="padding-top:32px">
         <div class="section__header">
@@ -27,10 +36,7 @@ export class CardsPageComponent extends Component {
             <input class="cards-toolbar__search" id="cardSearch" type="text" placeholder="Search cards...">
           </div>
           <button class="filter-btn active" data-rarity="all">All</button>
-          <button class="filter-btn" data-rarity="legendary">Legendary</button>
-          <button class="filter-btn" data-rarity="epic">Epic</button>
-          <button class="filter-btn" data-rarity="rare">Rare</button>
-          <button class="filter-btn" data-rarity="common">Common</button>
+          ${rarityButtons}
         </div>
         <div class="card-showcase" id="cardsGrid"></div>
       </div>
@@ -57,7 +63,7 @@ export class CardsPageComponent extends Component {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        this.#activeRarity = (btn as HTMLElement).dataset.rarity as CardRarity | 'all';
+        this.#activeRarity = (btn as HTMLElement).dataset.rarity ?? 'all';
         this.#renderGrid();
       });
     });
@@ -65,7 +71,7 @@ export class CardsPageComponent extends Component {
 
   #renderGrid(): void {
     let cards = this.#collection.filterByRarity(this.#activeRarity);
-    
+
     if (this.#searchQuery) {
       const q = this.#searchQuery.toLowerCase();
       cards = cards.filter(c =>
@@ -97,12 +103,12 @@ export class CardsPageComponent extends Component {
             ? `<img class="tcg-card__art-img" src="${card.artUrl}" alt="${card.name}" loading="lazy">`
             : `<div class="tcg-card__art-bg" style="background:${card.artGradient}"></div>`
           }
-          <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
+          <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity.name}</span>
           <span class="tcg-card__mana-cost">${card.manaCost}</span>
         </div>
         <div class="tcg-card__info">
           <div class="tcg-card__name">${card.name}</div>
-          <div class="tcg-card__type">${card.type} &mdash; ${card.set}</div>
+          <div class="tcg-card__type">${card.type} &mdash; ${card.set.name}</div>
           <div class="tcg-card__stats-row">
             <span class="tcg-card__stat tcg-card__stat--atk">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14.7 2.3a1 1 0 0 0-1.4 0l-4.6 4.6L6 4.2a1 1 0 0 0-1.4 0L2.3 6.5a1 1 0 0 0 0 1.4L5 10.6l-2.3 2.3a1 1 0 0 0 0 1.4l6 6a1 1 0 0 0 1.4 0l2.3-2.3 2.7 2.7a1 1 0 0 0 1.4 0l2.3-2.3a1 1 0 0 0 0-1.4L16.1 14.3l4.6-4.6a1 1 0 0 0 0-1.4l-6-6z"/></svg>

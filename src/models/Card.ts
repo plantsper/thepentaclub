@@ -1,21 +1,22 @@
-import type { ICard, CardType, CardRarity, CardSet } from '../types';
+import type { ICard, IRarity, ICardSet, ITag, CardType } from '../types';
 
 export class Card implements ICard {
   constructor(
     public readonly id: string,
     public readonly name: string,
     public readonly type: CardType,
-    public readonly rarity: CardRarity,
+    public readonly rarity: IRarity,
     public readonly manaCost: number,
     public readonly attack: number,
     public readonly defense: number,
     public readonly description: string,
     public readonly artGradient: string,
-    public readonly set: CardSet,
+    public readonly set: ICardSet,
+    public readonly tags: ITag[],
     public readonly artUrl?: string
   ) {}
 
   get rarityClass(): string {
-    return `tcg-card__rarity--${this.rarity.toLowerCase()}`;
+    return `tcg-card__rarity--${this.rarity.name.toLowerCase()}`;
   }
 }

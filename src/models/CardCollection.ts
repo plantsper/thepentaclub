@@ -1,4 +1,4 @@
-import type { ICard, ICardCollection, CardRarity, CardType } from '../types';
+import type { ICard, ICardCollection, CardType } from '../types';
 
 export class CardCollection implements ICardCollection {
   #cards: ICard[] = [];
@@ -19,9 +19,9 @@ export class CardCollection implements ICardCollection {
     this.#cards.push(card);
   }
 
-  filterByRarity(rarity: CardRarity | 'all'): ICard[] {
-    if (rarity === 'all') return this.all;
-    return this.#cards.filter(c => c.rarity.toLowerCase() === rarity.toLowerCase());
+  filterByRarity(rarityName: string | 'all'): ICard[] {
+    if (rarityName === 'all') return this.all;
+    return this.#cards.filter(c => c.rarity.name.toLowerCase() === rarityName.toLowerCase());
   }
 
   filterByType(type: CardType | 'all'): ICard[] {

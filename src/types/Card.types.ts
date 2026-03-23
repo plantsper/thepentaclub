@@ -1,19 +1,37 @@
 export type CardType = 'Champion' | 'Spell' | 'Artifact';
-export type CardRarity = 'Legendary' | 'Epic' | 'Rare' | 'Common';
-export type CardSet = 'Rift Core' | 'Shattered Realms' | 'Tidal Abyss' | 'Void Expanse';
+
+export interface IRarity {
+  id: number;
+  name: string;
+  sortOrder: number;
+  colorHex: string;
+}
+
+export interface ICardSet {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+}
+
+export interface ITag {
+  id: number;
+  name: string;
+}
 
 export interface ICard {
   id: string;
   name: string;
   type: CardType;
-  rarity: CardRarity;
+  rarity: IRarity;
   manaCost: number;
   attack: number;
   defense: number;
   description: string;
   artGradient: string;
   artUrl?: string;
-  set: CardSet;
+  set: ICardSet;
+  tags: ITag[];
   readonly rarityClass: string;
 }
 
@@ -21,7 +39,7 @@ export interface ICardCollection {
   readonly all: ICard[];
   readonly count: number;
   add(card: ICard): void;
-  filterByRarity(rarity: CardRarity | 'all'): ICard[];
+  filterByRarity(rarityName: string | 'all'): ICard[];
   filterByType(type: CardType | 'all'): ICard[];
   search(query: string): ICard[];
 }

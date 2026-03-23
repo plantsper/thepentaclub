@@ -1,5 +1,19 @@
 import { Card } from '../models/Card';
-import type { ICard } from '../types';
+import type { ICard, IRarity, ICardSet } from '../types';
+
+const RARITIES: Record<string, IRarity> = {
+  Legendary: { id: 1, name: 'Legendary', sortOrder: 1, colorHex: '#fbbf24' },
+  Epic:      { id: 2, name: 'Epic',      sortOrder: 2, colorHex: '#a855f7' },
+  Rare:      { id: 3, name: 'Rare',      sortOrder: 3, colorHex: '#00c4ff' },
+  Common:    { id: 4, name: 'Common',    sortOrder: 4, colorHex: '#566380' },
+};
+
+const SETS: Record<string, ICardSet> = {
+  'Rift Core':        { id: 1, name: 'Rift Core',        slug: 'rift-core',        description: 'The foundational set.' },
+  'Shattered Realms': { id: 2, name: 'Shattered Realms', slug: 'shattered-realms', description: 'Chaos fractures the multiverse.' },
+  'Tidal Abyss':      { id: 3, name: 'Tidal Abyss',      slug: 'tidal-abyss',      description: 'Ancient power stirs in the depths.' },
+  'Void Expanse':     { id: 4, name: 'Void Expanse',      slug: 'void-expanse',     description: 'The space between worlds tears open.' },
+};
 
 export function createSampleCards(): ICard[] {
   const gradients = [
@@ -22,34 +36,35 @@ export function createSampleCards(): ICard[] {
   ];
 
   const data: Array<[string, string, string, number, number, number, string, string]> = [
-    ['Vexar, Riftwalker', 'Champion', 'Legendary', 8, 9, 7, 'Traverses dimensions at will', 'Rift Core'],
-    ['Luminara Shield', 'Spell', 'Epic', 5, 0, 8, 'Creates an impenetrable barrier', 'Rift Core'],
-    ['Shadow Stalker', 'Champion', 'Rare', 3, 6, 3, 'Strikes from the void', 'Rift Core'],
-    ['Mana Surge', 'Spell', 'Common', 2, 0, 0, 'Restores 3 mana crystals', 'Rift Core'],
-    ['Drakonith, World Eater', 'Champion', 'Legendary', 10, 12, 5, 'Devours entire realms', 'Shattered Realms'],
-    ['Ethereal Blade', 'Artifact', 'Epic', 4, 7, 2, 'Cuts through magical defenses', 'Shattered Realms'],
-    ['Thornweaver', 'Champion', 'Rare', 4, 5, 5, 'Commands living vines', 'Shattered Realms'],
-    ['Crystal Shard', 'Artifact', 'Common', 1, 2, 1, 'A fragment of pure mana', 'Shattered Realms'],
-    ['Azura, Tidecaller', 'Champion', 'Legendary', 7, 8, 8, 'Bends oceans to her will', 'Tidal Abyss'],
-    ['Flamestrike', 'Spell', 'Epic', 6, 10, 0, 'Rains fire upon all enemies', 'Tidal Abyss'],
-    ['Void Sentinel', 'Champion', 'Rare', 5, 4, 7, 'Guards the rift passages', 'Tidal Abyss'],
-    ['Healing Spring', 'Spell', 'Common', 2, 0, 3, 'Restores health each turn', 'Tidal Abyss'],
-    ['Nyx, Shadow Queen', 'Champion', 'Legendary', 9, 10, 6, 'Rules the darkness between worlds', 'Void Expanse'],
-    ['Chronoshift', 'Spell', 'Epic', 7, 0, 0, 'Reverses the last two turns', 'Void Expanse'],
-    ['Iron Golem', 'Champion', 'Rare', 6, 3, 9, 'Unyielding metal construct', 'Void Expanse'],
-    ['Quick Draw', 'Spell', 'Common', 1, 3, 0, 'A swift surprise attack', 'Void Expanse'],
+    ['Vexar, Riftwalker',    'Champion', 'Legendary', 8,  9,  7, 'Traverses dimensions at will',         'Rift Core'],
+    ['Luminara Shield',      'Spell',    'Epic',      5,  0,  8, 'Creates an impenetrable barrier',       'Rift Core'],
+    ['Shadow Stalker',       'Champion', 'Rare',      3,  6,  3, 'Strikes from the void',                'Rift Core'],
+    ['Mana Surge',           'Spell',    'Common',    2,  0,  0, 'Restores 3 mana crystals',             'Rift Core'],
+    ['Drakonith, World Eater','Champion','Legendary', 10, 12, 5, 'Devours entire realms',                'Shattered Realms'],
+    ['Ethereal Blade',       'Artifact', 'Epic',      4,  7,  2, 'Cuts through magical defenses',        'Shattered Realms'],
+    ['Thornweaver',          'Champion', 'Rare',      4,  5,  5, 'Commands living vines',                'Shattered Realms'],
+    ['Crystal Shard',        'Artifact', 'Common',    1,  2,  1, 'A fragment of pure mana',              'Shattered Realms'],
+    ['Azura, Tidecaller',    'Champion', 'Legendary', 7,  8,  8, 'Bends oceans to her will',             'Tidal Abyss'],
+    ['Flamestrike',          'Spell',    'Epic',      6,  10, 0, 'Rains fire upon all enemies',          'Tidal Abyss'],
+    ['Void Sentinel',        'Champion', 'Rare',      5,  4,  7, 'Guards the rift passages',             'Tidal Abyss'],
+    ['Healing Spring',       'Spell',    'Common',    2,  0,  3, 'Restores health each turn',            'Tidal Abyss'],
+    ['Nyx, Shadow Queen',    'Champion', 'Legendary', 9,  10, 6, 'Rules the darkness between worlds',   'Void Expanse'],
+    ['Chronoshift',          'Spell',    'Epic',      7,  0,  0, 'Reverses the last two turns',          'Void Expanse'],
+    ['Iron Golem',           'Champion', 'Rare',      6,  3,  9, 'Unyielding metal construct',           'Void Expanse'],
+    ['Quick Draw',           'Spell',    'Common',    1,  3,  0, 'A swift surprise attack',              'Void Expanse'],
   ];
 
   return data.map((d, i) => new Card(
     `card-${i + 1}`,
     d[0],
     d[1] as 'Champion' | 'Spell' | 'Artifact',
-    d[2] as 'Legendary' | 'Epic' | 'Rare' | 'Common',
+    RARITIES[d[2]],
     d[3],
     d[4],
     d[5],
     d[6],
     gradients[i % gradients.length],
-    d[7] as 'Rift Core' | 'Shattered Realms' | 'Tidal Abyss' | 'Void Expanse'
+    SETS[d[7]],
+    []
   ));
 }

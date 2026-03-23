@@ -98,6 +98,145 @@
   font-size: 12px;
 }
 
+/* Lookup management */
+.admin-lookups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.admin-lookup-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+
+.admin-lookup-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+}
+
+.admin-lookup-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+  margin-bottom: 12px;
+}
+
+.admin-lookup-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.admin-lookup-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px 8px 3px 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.admin-lookup-chip__del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color 0.15s;
+  font-family: inherit;
+}
+
+.admin-lookup-chip__del:hover {
+  color: #f87171;
+}
+
+.admin-lookup-form {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.admin-lookup-form input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+  flex: 1;
+  min-width: 120px;
+  transition: border-color 0.2s;
+}
+
+.admin-lookup-form input:focus {
+  border-color: var(--accent);
+}
+
+/* Tags checkboxes in form */
+.tags-checkbox-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.tag-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px 4px 8px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.tag-checkbox:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.tag-checkbox input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.admin-table__tags {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 700px) {
+  .admin-lookups {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Toolbar */
 .admin-toolbar {
   margin-bottom: 20px;

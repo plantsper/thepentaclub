@@ -48,12 +48,12 @@ export class CardGridComponent extends Component {
             ? `<img class="tcg-card__art-img" src="${card.artUrl}" alt="${card.name}" loading="lazy">`
             : `<div class="tcg-card__art-bg" style="background:${card.artGradient}"></div>`
           }
-          <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
+          <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity.name}</span>
           <span class="tcg-card__mana-cost">${card.manaCost}</span>
         </div>
         <div class="tcg-card__info">
           <div class="tcg-card__name">${card.name}</div>
-          <div class="tcg-card__type">${card.type} &mdash; ${card.set}</div>
+          <div class="tcg-card__type">${card.type} &mdash; ${card.set.name}</div>
           <div class="tcg-card__stats-row">
             <span class="tcg-card__stat tcg-card__stat--atk">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14.7 2.3a1 1 0 0 0-1.4 0l-4.6 4.6L6 4.2a1 1 0 0 0-1.4 0L2.3 6.5a1 1 0 0 0 0 1.4L5 10.6l-2.3 2.3a1 1 0 0 0 0 1.4l6 6a1 1 0 0 0 1.4 0l2.3-2.3 2.7 2.7a1 1 0 0 0 1.4 0l2.3-2.3a1 1 0 0 0 0-1.4L16.1 14.3l4.6-4.6a1 1 0 0 0 0-1.4l-6-6z"/></svg>
