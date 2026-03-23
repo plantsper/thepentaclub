@@ -2,33 +2,37 @@
 
 ## Project Overview
 
-A single-page application (SPA) for a collectible trading card game called "Riftbound TCG" set in the Wildrift universe. The application showcases a card collection system with filtering, searching, and multiple page views.
+A single-page application (SPA) for **Riftbound TCG**, a collectible trading card game set in the League of Legends / Runeterra universe. The application includes a card collection system with filtering, searching, lightbox detail views, and a Supabase-backed data layer with image hosting.
 
 ## Core Functionality
 
 ### 1. **Application Architecture**
-- **Pattern**: Object-Oriented Programming (OOP) with TypeScript-style classes compiled to ES6
+- **Pattern**: Object-Oriented Programming (OOP) with TypeScript classes
 - **Routing**: Hash-based SPA routing (`#/`, `#/cards`, `#/about`)
 - **State Management**: Event-driven architecture using EventEmitter pattern
 - **Rendering**: Component-based UI with manual DOM manipulation
+- **Data Layer**: Supabase (PostgreSQL + PostgREST REST API), with hardcoded sample data fallback
+- **App Init**: Async — shows loading spinner, fetches cards from Supabase, falls back to `sampleData.ts` on error
 
 ### 2. **Data Models**
 
-#### Card Model
-Represents individual trading cards with properties:
-- `id`: Unique identifier
+#### Card Model (`src/models/Card.ts`)
+Represents individual trading cards:
+- `id`: Unique identifier (UUID from Supabase)
 - `name`: Card name
-- `type`: Card type (Champion, Spell, Artifact)
-- `rarity`: Rarity level (Legendary, Epic, Rare, Common)
+- `type`: Card type (`Champion` | `Spell` | `Artifact`)
+- `rarity`: Rarity level (`Legendary` | `Epic` | `Rare` | `Common`)
 - `manaCost`: Mana cost to play the card
-- `attack`: Attack value
-- `defense`: Defense value
-- `description`: Card description
-- `artGradient`: CSS gradient for card artwork
+- `attack`: Attack value (0 for non-combat cards)
+- `defense`: Defense value (0 for non-combat cards)
+- `description`: Flavor/ability text
+- `artGradient`: CSS gradient fallback for card artwork
+- `artUrl?`: Optional Supabase Storage public URL for card image
 - `set`: Expansion set name
+- `rarityClass` (getter): CSS class string for rarity badge styling
 
-#### CardCollection Model
-Manages the complete card collection with methods:
+#### CardCollection Model (`src/models/CardCollection.ts`)
+Manages the complete card collection:
 - `all`: Returns all cards
 - `count`: Total card count
 - `add(card)`: Add new card to collection
@@ -38,261 +42,254 @@ Manages the complete card collection with methods:
 
 ### 3. **Routing System**
 
-#### Router Class
-- Hash-based navigation system
+#### Router Class (`src/services/Router.ts`)
+- Hash-based navigation
 - Route registration with handlers
 - Navigation method for programmatic routing
 - Hash change event listener
-- Current route tracking
 
 **Registered Routes:**
-- `/` - Home page
-- `/cards` - Cards collection page
-- `/about` - About page
+- `/` — Home page
+- `/cards` — Cards collection page
+- `/about` — About page
 
 ### 4. **Component Architecture**
 
-#### Base Component (Abstract)
+#### Base Component (`src/components/base/Component.ts`)
 - `_container`: DOM container reference
-- `render()`: Abstract method for HTML generation
+- `render()`: Abstract method returning HTML string
 - `mount()`: Renders and inserts HTML into container
-- `afterMount()`: Lifecycle hook for post-render logic
+- `afterMount()`: Lifecycle hook for post-render event listeners
 - `destroy()`: Cleanup method
 
-#### Navigation Component (`NavComponent`)
+#### Navigation (`src/components/layout/NavComponent.ts`)
 - Fixed header navigation
 - Mobile responsive menu toggle
 - Active route highlighting
 - Scroll-based styling changes
-- Logo with animated shimmer effect
 
-#### Hero Component (`HeroComponent`)
+#### Hero (`src/components/home/HeroComponent.ts`)
 - Full-screen hero section
 - Animated badge with pulsing dot
 - Gradient accent text
-- Call-to-action buttons
-- Floating particle animation (20 particles)
+- CTA buttons
+- 20 floating particle animations
 
-#### Stats Component (`StatsComponent`)
+#### Stats (`src/components/home/StatsComponent.ts`)
 - Grid-based statistics display
-- Animated gradient values
-- Configurable stats array
+- Configurable `IStat[]` array
 
-#### Features Component (`FeaturesComponent`)
-- Feature cards grid (auto-fit layout)
-- Icon-based features
+#### Features (`src/components/home/FeaturesComponent.ts`)
+- Feature cards grid
 - Staggered entrance animations
-- Hover effects with accent borders
-- Three color variants (green, blue, purple)
+- Three icon color variants (green, blue, purple)
 
-#### Card Grid Component (`CardGridComponent`)
-- Displays featured cards (first 8)
-- Individual card hover effects
-- Rarity badges
-- Mana cost display
-- Attack/Defense stats with icons
-- Gradient-based card art
+#### Card Grid (`src/components/home/CardGridComponent.ts`)
+- Displays first 8 cards as homepage preview
+- Supports image (`artUrl`) with gradient fallback
+- Hover zoom on both image and gradient art
+- Click delegates to emit `card:open` event → opens lightbox
 
-#### CTA Component (`CTAComponent`)
-- Call-to-action section
-- Animated rotating gradient background
-- Primary action button
+#### CTA (`src/components/home/CTAComponent.ts`)
+- Call-to-action section with animated rotating gradient background
 
-#### Footer Component (`FooterComponent`)
-- Multi-column layout
-- Brand information
-- Navigation links (Game, Community, Support)
-- Copyright and credits
+#### Footer (`src/components/layout/FooterComponent.ts`)
+- Multi-column layout (Game, Community, Support)
+- Brand information and copyright
 
-#### Cards Page Component (`CardsPageComponent`)
+#### Cards Page (`src/components/pages/CardsPageComponent.ts`)
 - Full card collection display
-- Search functionality (by name/type)
+- Real-time search (by name/type)
 - Rarity filter buttons (All, Legendary, Epic, Rare, Common)
-- Real-time filtering
 - Empty state handling
-- Active filter highlighting
+- Click delegates to emit `card:open` event → opens lightbox
 
-#### About Page Component (`AboutPageComponent`)
-- Lore and story content
-- Statistics grid
-- Rich text description
-- Themed with accent fonts
+#### About Page (`src/components/pages/AboutPageComponent.ts`)
+- Riftbound lore copy (based on official Riot Games Riftbound TCG)
+- References real sets, champions, Domains, Runeterra regions
+- Stats grid: 6 Domains, 500+ cards, 40+ Champions
 
-### 5. **Utilities**
+#### Card Lightbox (`src/components/shared/CardLightboxComponent.ts`)
+- Global modal mounted once in `App.ts`
+- Listens for `card:open` events via EventEmitter
+- Two-panel layout: art (left) + details (right)
+- Shows: set, name, type badge, description, attack/defense/mana stats, rarity bar
+- Supports `artUrl` image with gradient fallback
+- Close via backdrop click, X button, or Escape key
+- Smooth fade + scale animation; mobile collapses to bottom sheet
+- Locks body scroll while open
 
-#### EventEmitter
-- Observer pattern implementation
-- `on(event, fn)`: Register event listeners
-- `emit(event, data)`: Trigger events with data
+### 5. **Services**
 
-#### ScrollAnimator
+#### EventEmitter (`src/services/EventEmitter.ts`)
+- `on(event, fn)`: Register event listener
+- `emit(event, data)`: Fire event with payload
+- Used for `card:open` event between card grids and lightbox
+
+#### Router (`src/services/Router.ts`)
+- Hash-based SPA routing
+
+#### CardService (`src/services/CardService.ts`)
+- `fetchCards()`: Queries Supabase `cards` table, maps snake_case rows to `ICard` objects
+- Lazily creates Supabase client (inside function, not at module level)
+- Guards for missing env vars — throws `'Supabase env vars not set'` caught by App fallback
+- Maps `art_url` (nullable DB column) to `artUrl?: string`
+
+### 6. **Utilities**
+
+#### ScrollAnimator (`src/utils/ScrollAnimator.ts`)
 - Intersection Observer-based scroll animations
 - Triggers `.visible` class on `.stagger-in` elements
-- Threshold: 10%, with -40px bottom margin
 
-### 6. **Design System**
+#### sampleData (`src/utils/sampleData.ts`)
+- 16 hardcoded cards used as fallback when Supabase is unavailable
+- 4 sets × 4 rarities
+
+### 7. **Database — Supabase**
+
+#### Connection
+- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`
+- Vite `envDir: '../'` required because `root` is `./src`
+
+#### Cards Table (`supabase/migrations/001_create_cards_table.sql`)
+Columns: `id` (UUID PK), `name`, `type`, `rarity`, `mana_cost`, `attack`, `defense`, `description`, `art_gradient`, `set_name`, `art_url` (nullable), `created_at`
+
+Row Level Security:
+- Public: SELECT only
+- Authenticated: full CRUD (admin use via Supabase Studio)
+
+#### Storage (`supabase/migrations/003_add_art_url.sql`)
+- Bucket: `card-art` (public)
+- Max file size: 5 MB
+- Allowed types: JPEG, PNG, WebP, GIF
+- Same RLS pattern: public read, auth write
+
+#### CMS Workflow
+Supabase Studio table editor is the primary CMS:
+- Add/edit/delete cards in Table Editor
+- Upload card art in Storage → copy public URL → paste into `art_url`
+
+### 8. **Design System**
 
 #### Color Palette
-- **Backgrounds**: Deep dark blues (#060a10 to #1e3350)
-- **Accent Primary**: Bright cyan (#00e68a)
-- **Accent Secondary**: Bright blue (#00c4ff)
-- **Accent Tertiary**: Purple (#a855f7)
-- **Text**: Tiered from primary (#e8ecf4) to muted (#566380)
+- **Backgrounds**: `--bg-deep: #060a10` → `--bg-elevated: #1e3350`
+- **Accent Primary**: `--accent: #00e68a` (cyan-green)
+- **Accent Secondary**: `--accent-secondary: #00c4ff` (blue)
+- **Accent Tertiary**: `--accent-tertiary: #a855f7` (purple)
+- **Text**: `--text-primary: #e8ecf4` → `--text-muted: #566380`
 
 #### Typography
-- **Display Font**: Outfit (sans-serif)
-- **Body Font**: Outfit (sans-serif)
-- **Accent Font**: Crimson Pro (serif)
-- Font weights: 300-900
+- **Display/Body**: Outfit (sans-serif)
+- **Accent**: Crimson Pro (serif, used for card descriptions and lore text)
 
-#### Visual Effects
-- Animated mesh gradient background
-- Grid overlay with radial mask
-- Glassmorphism (backdrop-filter blur)
-- Card hover transformations
-- Shimmer animations
-- Rotating gradient effects
-- Particle float animations
-
-#### Spacing & Radii
-- Border radius: 6px (sm) to 24px (xl)
-- Responsive padding: clamp-based
-- Grid gaps: 12px-20px
-
-### 7. **Sample Data**
-
-16 pre-seeded cards across 4 sets:
-- **Rift Core** (4 cards)
-- **Shattered Realms** (4 cards)
-- **Tidal Abyss** (4 cards)
-- **Void Expanse** (4 cards)
-
-Rarity distribution:
-- Legendary: 4 cards
-- Epic: 4 cards
-- Rare: 4 cards
-- Common: 4 cards
-
-### 8. **Responsive Design**
-
-#### Mobile Breakpoint (<768px)
-- Hidden nav links by default
-- Mobile toggle button (hamburger menu)
-- Overlay menu on toggle
-- 2-column footer
-- Adjusted hero font sizes
-
-#### Small Mobile (<480px)
-- Single-column footer
-- 2-column stats grid
-
-### 9. **Animations & Interactions**
-
-- **Hero fade-in**: Staggered entrance for title, subtitle, buttons
-- **Shimmer effect**: Logo icon animation (3s loop)
-- **Pulse animation**: Badge dot (2s loop)
-- **Float animation**: Particle effects
-- **Rotating background**: CTA section gradient (12s loop)
-- **Stagger-in entries**: Sequential card/feature appearances
-- **Hover transforms**: Cards lift and scale on hover
-
-### 10. **App Initialization Flow**
-
-1. Create root skeleton (backgrounds, nav, page containers, footer)
-2. Mount navigation component
-3. Mount footer component
-4. Initialize router with route handlers
-5. Register routes (/, /cards, /about)
-6. Start router (reads initial hash)
-7. On route change:
-   - Update nav active state
-   - Hide all pages
-   - Scroll to top
-   - Mount appropriate page component
-   - Trigger scroll animations
-
-## Technical Debt & Improvements
-
-### Current Limitations
-- All code in single HTML file
-- No build process
-- No TypeScript compilation
-- Manual DOM manipulation
-- No state management library
-- Hardcoded sample data
-- No API integration
-- No testing
-
-### Recommended Modularization
-
-#### Directory Structure
+#### CSS Structure (`src/styles/`)
 ```
-src/
-├── models/
-│   ├── Card.ts
-│   └── CardCollection.ts
-├── services/
-│   ├── Router.ts
-│   └── EventEmitter.ts
-├── components/
-│   ├── base/
-│   │   └── Component.ts
-│   ├── layout/
-│   │   ├── NavComponent.ts
-│   │   └── FooterComponent.ts
-│   ├── home/
-│   │   ├── HeroComponent.ts
-│   │   ├── StatsComponent.ts
-│   │   ├── FeaturesComponent.ts
-│   │   ├── CardGridComponent.ts
-│   │   └── CTAComponent.ts
-│   └── pages/
-│       ├── CardsPageComponent.ts
-│       └── AboutPageComponent.ts
-├── utils/
-│   ├── ScrollAnimator.ts
-│   └── sampleData.ts
-├── styles/
-│   ├── variables.css
-│   ├── base.css
+_variables.css       CSS custom properties
+_base.css            Reset & body styles
+_backgrounds.css     Animated mesh gradient + grid overlay
+_common.css          Section headers, buttons
+_utilities.css       Page transitions, stagger-in, @keyframes spin, responsive
+components/
+  nav.css
+  hero.css
+  stats.css
+  features.css
+  cards.css          Card grid, card art (img + gradient), rarity badges
+  lightbox.css       Modal overlay, dialog layout, art panel, body panel
+  cta.css
+  footer.css
+main.css             @import all of the above
+```
+
+### 9. **App Initialization Flow**
+
+1. Show loading spinner (CSS `@keyframes spin`)
+2. Call `fetchCards()` from CardService
+   - On success: populate `CardCollection` from Supabase
+   - On error (no env vars / network): fall back to `createSampleCards()`
+3. Build full app skeleton (bg-mesh, grid-overlay, nav, pages, footer, lightbox)
+4. Mount `NavComponent`, `FooterComponent`, `CardLightboxComponent`
+5. Register routes (`/`, `/cards`, `/about`) and start Router
+6. On route change: update nav active state, hide all pages, scroll to top, mount page component
+
+### 10. **Project Structure**
+
+```
+thepentaclub/
+├── src/
 │   ├── components/
-│   │   ├── nav.css
-│   │   ├── hero.css
-│   │   ├── cards.css
-│   │   └── footer.css
-│   └── main.css
-├── types/
-│   └── index.ts
-└── App.ts
+│   │   ├── base/Component.ts
+│   │   ├── home/
+│   │   │   ├── HeroComponent.ts
+│   │   │   ├── StatsComponent.ts
+│   │   │   ├── FeaturesComponent.ts
+│   │   │   ├── CardGridComponent.ts
+│   │   │   └── CTAComponent.ts
+│   │   ├── layout/
+│   │   │   ├── NavComponent.ts
+│   │   │   └── FooterComponent.ts
+│   │   ├── pages/
+│   │   │   ├── CardsPageComponent.ts
+│   │   │   └── AboutPageComponent.ts
+│   │   └── shared/
+│   │       └── CardLightboxComponent.ts
+│   ├── models/
+│   │   ├── Card.ts
+│   │   └── CardCollection.ts
+│   ├── services/
+│   │   ├── CardService.ts          ← Supabase data fetching
+│   │   ├── EventEmitter.ts
+│   │   └── Router.ts
+│   ├── styles/
+│   │   ├── components/
+│   │   │   ├── cards.css
+│   │   │   ├── lightbox.css        ← new
+│   │   │   └── (others)
+│   │   └── main.css
+│   ├── types/
+│   │   ├── Card.types.ts           ← includes artUrl?
+│   │   ├── Component.types.ts
+│   │   ├── Event.types.ts
+│   │   ├── Router.types.ts
+│   │   └── index.ts
+│   ├── utils/
+│   │   ├── ScrollAnimator.ts
+│   │   └── sampleData.ts
+│   ├── App.ts                      ← async init, Supabase fallback
+│   ├── main.ts
+│   └── index.html
+├── supabase/
+│   └── migrations/
+│       ├── 001_create_cards_table.sql
+│       ├── 002_seed_cards.sql
+│       └── 003_add_art_url.sql
+├── .env.example
+├── .env.local                      ← not committed, holds real keys
+├── tsconfig.json                   ← includes "types": ["vite/client"]
+├── vite.config.ts                  ← envDir: '../'
+└── package.json
 ```
 
-## Key Features for Enhancement
-
-1. **TypeScript Strict Mode**: Full type safety
-2. **CSS Modules**: Scoped styling per component
-3. **Build System**: Vite or Webpack for bundling
-4. **State Management**: Consider Zustand or Context API
-5. **API Layer**: Fetch real card data
-6. **Testing**: Jest + Testing Library
-7. **Accessibility**: ARIA labels, keyboard navigation
-8. **Performance**: Virtual scrolling for large card lists
-9. **Progressive Enhancement**: Server-side rendering option
-
-## Dependencies to Add
+### 11. **Dependencies**
 
 ```json
 {
-  "typescript": "^5.0.0",
-  "vite": "^5.0.0",
-  "@types/node": "^20.0.0"
+  "dependencies": {
+    "@supabase/supabase-js": "^2.100.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.2"
+  }
 }
 ```
 
-## Summary
+### 12. **Known Gotchas**
 
-This is a well-structured proof-of-concept SPA demonstrating OOP principles in JavaScript. The component-based architecture and encapsulated models make it an excellent candidate for TypeScript migration. The next phase should focus on:
-1. Setting up TypeScript configuration
-2. Modularizing into separate files
-3. Extracting CSS into modules
-4. Adding proper typings
-5. Implementing a build pipeline
+| Issue | Fix |
+|---|---|
+| `import.meta.env` not typed | `"types": ["vite/client"]` in tsconfig |
+| Env vars not found at build time | `envDir: '../'` in vite.config.ts (root is `./src`) |
+| Supabase crashes before App try/catch | `createClient` moved inside `fetchCards()`, not at module level |
+| Card art zoom on hover | Applied to both `.tcg-card__art-img` and `.tcg-card__art-bg` |

@@ -44,7 +44,10 @@ export class CardGridComponent extends Component {
     return cards.map((card, i) => `
       <div class="tcg-card stagger-in" style="transition-delay:${i * 0.06}s" data-card-id="${card.id}">
         <div class="tcg-card__art">
-          <div class="tcg-card__art-bg" style="width:100%;height:100%;background:${card.artGradient}"></div>
+          ${card.artUrl
+            ? `<img class="tcg-card__art-img" src="${card.artUrl}" alt="${card.name}" loading="lazy">`
+            : `<div class="tcg-card__art-bg" style="background:${card.artGradient}"></div>`
+          }
           <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
           <span class="tcg-card__mana-cost">${card.manaCost}</span>
         </div>

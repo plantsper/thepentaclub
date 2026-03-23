@@ -12,6 +12,7 @@ import { CardsPageComponent } from './components/pages/CardsPageComponent';
 import { AboutPageComponent } from './components/pages/AboutPageComponent';
 import { CardLightboxComponent } from './components/shared/CardLightboxComponent';
 import { ScrollAnimator } from './utils/ScrollAnimator';
+import { fetchCards } from './services/CardService';
 import { createSampleCards } from './utils/sampleData';
 import type { IStat, IFeature } from './types';
 
@@ -25,24 +26,41 @@ export class App {
 
   constructor(rootId: string) {
     this.#root = document.getElementById(rootId);
-    
+
     if (!this.#root) {
       throw new Error(`Root element with id "${rootId}" not found`);
     }
 
     this.#events = new EventEmitter();
-    this.#collection = new CardCollection(createSampleCards());
+    this.#collection = new CardCollection([]);
     this.#scrollAnimator = new ScrollAnimator();
-    
     this.#router = new Router((route) => this.#onNavigate(route));
-    
+
     this.#init();
   }
 
-  #init(): void {
+  async #init(): Promise<void> {
     if (!this.#root) return;
 
-    // Build skeleton
+    // Show loading screen while fetching cards
+    this.#root.innerHTML = `
+      <div class="bg-mesh"></div>
+      <div class="grid-overlay"></div>
+      <div style="height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+        <div style="width:40px;height:40px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:spin 0.8s linear infinite"></div>
+        <span style="font-size:13px;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase">Loading cards...</span>
+      </div>
+    `;
+
+    try {
+      const cards = await fetchCards();
+      this.#collection = new CardCollection(cards);
+    } catch {
+      // Supabase not configured yet — fall back to sample data
+      this.#collection = new CardCollection(createSampleCards());
+    }
+
+    // Build full app skeleton
     this.#root.innerHTML = `
       <div class="bg-mesh"></div>
       <div class="grid-overlay"></div>
@@ -54,15 +72,13 @@ export class App {
       <div id="lightboxMount"></div>
     `;
 
-    // Mount nav & footer
     const navMount = document.getElementById('navMount');
-    const footerMount = document.getElementById('footerMount');
-
     if (navMount) {
       this.#nav = new NavComponent(navMount);
       this.#nav.mount();
     }
 
+    const footerMount = document.getElementById('footerMount');
     if (footerMount) {
       new FooterComponent(footerMount).mount();
     }
@@ -72,7 +88,6 @@ export class App {
       new CardLightboxComponent(lightboxMount, this.#events).mount();
     }
 
-    // Register routes and start router
     this.#router
       .register('/', () => this.#showHome())
       .register('/cards', () => this.#showCards())

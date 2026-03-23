@@ -33,11 +33,20 @@
 .tcg-card__art-bg {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   transition: transform var(--transition-slow);
 }
 
-.tcg-card:hover .tcg-card__art-bg {
+.tcg-card__art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  display: block;
+  transition: transform var(--transition-slow);
+}
+
+.tcg-card:hover .tcg-card__art-bg,
+.tcg-card:hover .tcg-card__art-img {
   transform: scale(1.08);
 }
 

@@ -41,11 +41,20 @@ export class CardLightboxComponent extends Component {
     const body = document.getElementById('lightboxBody');
     if (!lightbox || !art || !body) return;
 
-    art.style.background = card.artGradient;
-    art.innerHTML = `
-      <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
-      <span class="lightbox__mana">${card.manaCost}</span>
-    `;
+    if (card.artUrl) {
+      art.style.background = '';
+      art.innerHTML = `
+        <img class="lightbox__art-img" src="${card.artUrl}" alt="${card.name}">
+        <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
+        <span class="lightbox__mana">${card.manaCost}</span>
+      `;
+    } else {
+      art.style.background = card.artGradient;
+      art.innerHTML = `
+        <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity}</span>
+        <span class="lightbox__mana">${card.manaCost}</span>
+      `;
+    }
 
     const rarityColors: Record<string, string> = {
       Legendary: '#ffd700',

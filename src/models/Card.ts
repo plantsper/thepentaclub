@@ -11,7 +11,8 @@ export class Card implements ICard {
     public readonly defense: number,
     public readonly description: string,
     public readonly artGradient: string,
-    public readonly set: CardSet
+    public readonly set: CardSet,
+    public readonly artUrl?: string
   ) {}
 
   get rarityClass(): string {

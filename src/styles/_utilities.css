@@ -1,3 +1,7 @@
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .page {
   opacity: 0;
   transform: translateY(16px);

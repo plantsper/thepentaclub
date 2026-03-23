@@ -12,6 +12,7 @@ export interface ICard {
   defense: number;
   description: string;
   artGradient: string;
+  artUrl?: string;
   set: CardSet;
   readonly rarityClass: string;
 }
