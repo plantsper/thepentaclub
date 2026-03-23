@@ -1,197 +1,125 @@
-# The Pentaclub — Riftbound TCG
+# Riftbound TCG — The Pentaclub
 
-A modern TypeScript-based single-page application for a trading card game set in the Wildrift universe.
+A TypeScript SPA for the Riftbound TCG card game, set in the League of Legends / Runeterra universe. Cards are served from a Supabase database with card art hosted in Supabase Storage.
 
-## 🚀 Quick Start
+## Quick Start
 
 ```bash
-# Install dependencies
 npm install
-
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
+cp .env.example .env.local   # fill in your Supabase keys
+npm run dev                   # http://localhost:3000
 ```
 
-The application will be available at **http://localhost:3000**
+If Supabase keys are not set, the app falls back to 16 hardcoded sample cards automatically.
 
-## 📁 Project Structure
+## Environment Variables
+
+| Variable | Description |
+|---|---|
+| `VITE_SUPABASE_URL` | Your Supabase project URL (`https://xxx.supabase.co`) |
+| `VITE_SUPABASE_ANON_KEY` | Your Supabase anon/public key |
+
+Both values are in your Supabase dashboard under **Project Settings → API**.
+
+## Database Setup
+
+Run these SQL files in Supabase **SQL Editor** in order:
 
 ```
-thepentaclub/
-├── src/
-│   ├── types/              # TypeScript interfaces
-│   ├── models/             # Data models (Card, CardCollection)
-│   ├── services/           # Core services (Router, EventEmitter)
-│   ├── components/         # UI components
-│   │   ├── base/           # Abstract base component
-│   │   ├── layout/         # Nav & Footer
-│   │   ├── home/           # Home page components
-│   │   └── pages/          # Page components
-│   ├── utils/              # Utilities (ScrollAnimator, sampleData)
-│   ├── styles/             # Modular CSS files
-│   ├── App.ts              # Main application controller
-│   ├── main.ts             # Entry point
-│   └── index.html          # HTML template
-├── package.json
-├── tsconfig.json           # TypeScript configuration
-├── vite.config.ts          # Vite build configuration
-├── PROJECT_OVERVIEW.md     # Detailed project documentation
-├── MIGRATION_PLAN.md       # Migration strategy
-└── MIGRATION_COMPLETE.md   # Migration summary
+supabase/migrations/001_create_cards_table.sql   — schema + RLS
+supabase/migrations/002_seed_cards.sql           — 16 sample cards
+supabase/migrations/003_add_art_url.sql          — image column + storage bucket
 ```
 
-## 🎯 Features
+## Scripts
 
-- **Trading Card Collection**: Browse and filter 500+ unique cards
-- **Search & Filter**: Real-time search by name/type, filter by rarity
-- **Responsive Design**: Mobile-first design with adaptive layouts
-- **Smooth Animations**: Intersection Observer-based scroll animations
-- **Hash Routing**: Client-side routing for seamless navigation
-
-## 🛠️ Tech Stack
-
-- **TypeScript**: Strict type checking and modern ES features
-- **Vite**: Lightning-fast HMR and build tooling
-- **CSS Modules**: Modular, maintainable stylesheets
-- **Hash Router**: Simple SPA routing without server configuration
-
-## 📦 Scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server with HMR |
-| `npm run build` | Build for production (outputs to dist/) |
+| Command | Description |
+|---|---|
+| `npm run dev` | Dev server with HMR at localhost:3000 |
+| `npm run build` | Production build → `dist/` |
 | `npm run preview` | Preview production build locally |
 
-## 🏗️ Architecture
+## Project Structure
 
-### Component-Based
-- Abstract `Component` base class
-- Lifecycle methods (render, mount, afterMount, destroy)
-- Dependency injection for testability
-
-### Type-Safe
-- Interfaces for all data structures
-- Private fields with `#` syntax
-- Strict TypeScript configuration
-
-### Modular CSS
-- Variables for theming
-- Component-specific stylesheets
-- Utility classes for animations
-
-## 📄 Pages
-
-- **Home** (`/`): Hero, stats, features, card preview, CTA
-- **Cards** (`/cards`): Full collection with search and filters
-- **About** (`/about`): Lore and universe information
-
-## 🎨 Design System
-
-### Colors
-- **Backgrounds**: Deep dark blues (#060a10 to #1e3350)
-- **Accent**: Bright cyan (#00e68a), blue (#00c4ff), purple (#a855f7)
-- **Text**: Tiered from primary (#e8ecf4) to muted (#566380)
-
-### Typography
-- **Display/Body**: Outfit (sans-serif)
-- **Accent**: Crimson Pro (serif)
-
-### Effects
-- Animated mesh gradient backgrounds
-- Glassmorphism navigation
-- Card hover transformations
-- Staggered entrance animations
-
-## 🔧 Development
-
-### Adding a New Component
-
-1. Create TypeScript file in `src/components/`
-2. Extend the `Component` base class
-3. Implement `render()` method
-4. Optional: Override `afterMount()` for event listeners
-5. Create corresponding CSS in `src/styles/components/`
-6. Import in parent component or App.ts
-
-### Adding a New Page
-
-1. Create component in `src/components/pages/`
-2. Register route in `App.ts`
-3. Add navigation link in `NavComponent.ts`
-
-## 📊 Type Safety
-
-All major structures have TypeScript interfaces:
-- `ICard`, `ICardCollection`
-- `IComponent`, `IStat`, `IFeature`
-- `IRouter`, `IEventEmitter`
-
-## 🚢 Deployment
-
-### Build for Production
-
-```bash
-npm run build
+```
+src/
+├── components/
+│   ├── base/Component.ts           Abstract base class
+│   ├── home/                       Homepage sections
+│   │   ├── HeroComponent.ts
+│   │   ├── StatsComponent.ts
+│   │   ├── FeaturesComponent.ts
+│   │   ├── CardGridComponent.ts    Emits card:open on click
+│   │   └── CTAComponent.ts
+│   ├── layout/
+│   │   ├── NavComponent.ts
+│   │   └── FooterComponent.ts
+│   ├── pages/
+│   │   ├── CardsPageComponent.ts   Emits card:open on click
+│   │   └── AboutPageComponent.ts
+│   └── shared/
+│       └── CardLightboxComponent.ts  Global card detail modal
+├── models/
+│   ├── Card.ts                     Card data class
+│   └── CardCollection.ts           Collection + filter/search
+├── services/
+│   ├── CardService.ts              Supabase data fetching
+│   ├── EventEmitter.ts             Event bus (card:open, etc.)
+│   └── Router.ts                   Hash-based SPA routing
+├── styles/
+│   ├── components/
+│   │   ├── cards.css
+│   │   ├── lightbox.css
+│   │   └── ...
+│   └── main.css
+├── types/                          TypeScript interfaces
+├── utils/
+│   ├── sampleData.ts               Fallback card data
+│   └── ScrollAnimator.ts
+├── App.ts                          Async init, Supabase fetch
+└── index.html
+supabase/
+└── migrations/                     SQL migration files
 ```
 
-Outputs to `dist/` folder. Deploy this folder to:
-- Vercel
-- Netlify
-- GitHub Pages
-- Any static hosting service
+## Managing Cards (CMS)
 
-### Vercel Deployment
+Supabase Studio is the CMS. Go to your Supabase project dashboard:
+
+- **Add/edit/delete cards**: Table Editor → `cards` table
+- **Upload card art**: Storage → `card-art` bucket → Upload → copy public URL → paste into card's `art_url` field
+
+Cards without an `art_url` render a CSS gradient instead.
+
+**Recommended image size**: 1040 × 1460 px (the browser scales down with `object-fit: cover`).
+
+## Architecture Notes
+
+- **App init is async** — shows a spinner, fetches cards from Supabase, falls back to sample data on error
+- **Lightbox** is mounted once globally, opened via `EventEmitter` (`card:open` event)
+- **Card art** renders `<img>` when `artUrl` is set, falls back to CSS gradient div
+- **Vite `envDir: '../'`** is required because `root` is `./src` — without it env vars are undefined at build time
+- **Supabase client** is created lazily inside `fetchCards()` so a missing env var throws inside the try/catch rather than at module load
+
+## Pages
+
+| Route | Component |
+|---|---|
+| `#/` | Home — hero, stats, features, card preview grid, CTA |
+| `#/cards` | Full collection with search + rarity filter |
+| `#/about` | Riftbound universe lore |
+
+## Tech Stack
+
+- **TypeScript** (strict mode, ES2020)
+- **Vite 8** (HMR, production bundling)
+- **Supabase** (PostgreSQL + REST API + Storage)
+- **@supabase/supabase-js** v2
+
+## Deployment
 
 ```bash
-vercel --prod
+npm run build   # outputs to dist/
 ```
 
-## 📝 Notes
-
-- Original `index.html` in root is kept as backup
-- All new code is in `src/` directory
-- TypeScript compilation checks before build
-- No breaking changes - all functionality preserved
-
-## 🤝 Contributing
-
-1. Follow existing code structure
-2. Use TypeScript strict mode
-3. Add types for all functions
-4. Keep components modular and focused
-5. Run `npm run build` to check for errors
-
-## 📖 Documentation
-
-- [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) - Complete functionality breakdown
-- [MIGRATION_PLAN.md](MIGRATION_PLAN.md) - Migration strategy
-- [MIGRATION_COMPLETE.md](MIGRATION_COMPLETE.md) - What was changed
-
-## 🎮 Card Rarities
-
-- **Legendary**: Powerful realm-defining champions
-- **Epic**: Rare spells and artifacts
-- **Rare**: Strong champions and items
-- **Common**: Basic spells and utilities
-
-## 🌐 Browser Support
-
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
-- Mobile browsers (iOS Safari, Chrome Mobile)
-
----
-
-**Status**: ✅ Production Ready
-**Type Checking**: ✅ Passing
-**Build**: ✅ Successful
-
-Built with ❤️ for the Wildrift community
+Deploy `dist/` to Vercel, Netlify, or any static host. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as environment variables in your hosting dashboard.

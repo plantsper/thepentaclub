@@ -10,4 +10,6 @@
 @import './components/cta.css';
 @import './components/footer.css';
 @import './components/lightbox.css';
+@import './components/auth.css';
+@import './components/admin.css';
 @import './_utilities.css';

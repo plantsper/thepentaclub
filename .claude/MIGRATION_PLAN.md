@@ -387,21 +387,31 @@ src/
 
 1. ✅ Create project documentation (PROJECT_OVERVIEW.md)
 2. ✅ Create migration plan (MIGRATION_PLAN.md)
-3. ⏳ Initialize TypeScript & Vite
-4. ⏳ Create directory structure
-5. ⏳ Define TypeScript types/interfaces
-6. ⏳ Migrate models (Card, CardCollection)
-7. ⏳ Migrate services (EventEmitter, Router)
-8. ⏳ Migrate base Component
-9. ⏳ Migrate layout components (Nav, Footer)
-10. ⏳ Migrate home components (Hero, Stats, Features, CardGrid, CTA)
-11. ⏳ Migrate page components (CardsPage, AboutPage)
-12. ⏳ Migrate utilities (ScrollAnimator, sampleData)
-13. ⏳ Extract and modularize CSS
-14. ⏳ Migrate App controller
-15. ⏳ Create new HTML template
-16. ⏳ Test build and functionality
-17. ⏳ Update deployment config
+3. ✅ Initialize TypeScript & Vite
+4. ✅ Create directory structure
+5. ✅ Define TypeScript types/interfaces
+6. ✅ Migrate models (Card, CardCollection)
+7. ✅ Migrate services (EventEmitter, Router)
+8. ✅ Migrate base Component
+9. ✅ Migrate layout components (Nav, Footer)
+10. ✅ Migrate home components (Hero, Stats, Features, CardGrid, CTA)
+11. ✅ Migrate page components (CardsPage, AboutPage)
+12. ✅ Migrate utilities (ScrollAnimator, sampleData)
+13. ✅ Extract and modularize CSS
+14. ✅ Migrate App controller
+15. ✅ Create new HTML template
+16. ✅ Test build and functionality
+17. ✅ Update deployment config
+
+## Post-Migration Additions
+
+18. ✅ Card lightbox component (CardLightboxComponent + lightbox.css)
+19. ✅ Supabase database integration (CardService, async App init, fallback)
+20. ✅ Card image hosting via Supabase Storage (artUrl field, img rendering)
+21. ✅ About page Riftbound lore copy (based on official Riot Games TCG)
+22. ✅ Bug fix: tsconfig missing vite/client types
+23. ✅ Bug fix: vite.config.ts missing envDir (env vars not found at build)
+24. ✅ Bug fix: Supabase client lazy init (crash before App try/catch)
 
 ## Expected Benefits
 

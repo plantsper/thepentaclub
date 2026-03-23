@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseClient } from './supabaseClient';
 import { Card } from '../models/Card';
 import type { ICard, CardType, CardRarity, CardSet } from '../types';
 
@@ -17,11 +17,7 @@ interface CardRow {
 }
 
 export async function fetchCards(): Promise<ICard[]> {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Supabase env vars not set');
-
-  const supabase = createClient(url, key);
+  const supabase = getSupabaseClient();
 
   const { data, error } = await supabase
     .from('cards')

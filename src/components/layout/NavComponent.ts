@@ -2,8 +2,22 @@ import { Component } from '../base/Component';
 
 export class NavComponent extends Component {
   #mobileOpen: boolean = false;
+  #isLoggedIn: boolean;
+  #onLogout: () => void;
+
+  constructor(container: HTMLElement, isLoggedIn = false, onLogout: () => void = () => {}) {
+    super(container);
+    this.#isLoggedIn = isLoggedIn;
+    this.#onLogout = onLogout;
+  }
 
   render(): string {
+    const authLink = this.#isLoggedIn
+      ? `<a href="#/admin" class="nav__link" data-route="/admin">Admin</a>
+         <button class="nav__cta nav__cta--outline" id="navLogout">Logout</button>`
+      : `<a href="#/login" class="nav__link nav__link--muted" data-route="/login">Admin</a>
+         <button class="nav__cta" onclick="window.location.hash='#/cards'">Browse Cards</button>`;
+
     return `
       <nav class="nav" id="mainNav">
         <a href="#/" class="nav__logo">
@@ -14,7 +28,7 @@ export class NavComponent extends Component {
           <a href="#/" class="nav__link" data-route="/">Home</a>
           <a href="#/cards" class="nav__link" data-route="/cards">Cards</a>
           <a href="#/about" class="nav__link" data-route="/about">About</a>
-          <button class="nav__cta" onclick="window.location.hash='#/cards'">Browse Cards</button>
+          ${authLink}
         </div>
         <button class="nav__mobile-toggle" id="mobileToggle" aria-label="Menu">
           <span></span><span></span><span></span>
@@ -33,6 +47,8 @@ export class NavComponent extends Component {
     window.addEventListener('scroll', () => {
       document.getElementById('mainNav')?.classList.toggle('scrolled', window.scrollY > 40);
     });
+
+    document.getElementById('navLogout')?.addEventListener('click', () => this.#onLogout());
   }
 
   updateActive(route: string): void {

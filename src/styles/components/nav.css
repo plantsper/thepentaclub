@@ -116,6 +116,30 @@
   box-shadow: 0 0 20px var(--accent-glow);
 }
 
+.nav__link--muted {
+  color: var(--text-muted);
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.nav__link--muted:hover {
+  opacity: 1;
+  color: var(--text-muted);
+}
+
+.nav__cta--outline {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.nav__cta--outline:hover {
+  background: transparent;
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+  box-shadow: none;
+}
+
 .nav__mobile-toggle {
   display: none;
   width: 32px;
