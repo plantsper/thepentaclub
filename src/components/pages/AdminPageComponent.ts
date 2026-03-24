@@ -154,6 +154,10 @@ export class AdminPageComponent extends Component {
                 <div id="uploadStatus" class="art-upload__status hidden"></div>
               </div>
               <div id="scanStatus" class="scan-status hidden"></div>
+              <div class="scan-manual">
+                <input type="text" id="riftcodexSearch" placeholder="Override: type card name to search Riftcodex…" autocomplete="off">
+                <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" id="riftcodexSearchBtn">Search</button>
+              </div>
               <input type="text" id="fArtUrl" placeholder="or paste public image URL" style="margin-top:8px">
               <div id="artPreviewWrap" class="art-preview hidden">
                 <img id="artPreview" src="" alt="Art preview">
@@ -201,6 +205,11 @@ export class AdminPageComponent extends Component {
 
     document.getElementById('fArtUrl')?.addEventListener('input', (e) => {
       this.#updateArtPreview((e.target as HTMLInputElement).value.trim());
+    });
+
+    document.getElementById('riftcodexSearchBtn')?.addEventListener('click', () => this.#handleManualSearch());
+    document.getElementById('riftcodexSearch')?.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') this.#handleManualSearch();
     });
 
     document.getElementById('tagForm')?.addEventListener('submit', async (e) => {
@@ -540,52 +549,82 @@ export class AdminPageComponent extends Component {
     statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Reading card…';
 
     try {
-      // Step 1: OCR the name zone and card-number zone (fast path)
+      // Step 1: OCR name zone + type banner (two candidates) + card number
       const { extractCardName } = await import('../../services/CardOcrService');
-      const { name: ocrName, setCode, cardNumber } = await extractCardName(file);
+      const { name: ocrName, bannerName, setCode, cardNumber } = await extractCardName(file);
 
-      if (!ocrName) {
-        // Name extraction failed — run full fallback OCR
-        const { extractAllFields } = await import('../../services/CardOcrService');
-        const ocr = await extractAllFields(file);
-        this.#applyOcrFields(ocr);
-        statusEl.className = 'scan-status scan-status--warning';
-        statusEl.textContent = 'Could not read card name — partial fields filled from image.';
-        return;
-      }
-
-      // Step 2: Fuzzy search Riftcodex (pass set code for extra validation)
+      // Step 2: Try Riftcodex with each name candidate until one matches
       const { fuzzySearchCard } = await import('../../services/RiftcodexService');
-      const match = await fuzzySearchCard(ocrName, setCode);
+      let match = null;
+      let matchedBy = '';
+
+      if (ocrName) {
+        match = await fuzzySearchCard(ocrName, setCode);
+        if (match) matchedBy = ocrName;
+      }
+      // If name zone failed, try the champion name extracted from the type banner
+      if (!match && bannerName) {
+        match = await fuzzySearchCard(bannerName, setCode);
+        if (match) matchedBy = bannerName;
+      }
 
       if (match) {
         this.#applyRiftcodexFields(match.fields);
-        const numInfo    = cardNumber ? ` · ${cardNumber}` : '';
-        const validated  = match.fields.setValidated;
-        const setLabel   = setCode
-          ? ` · ${setCode} ${validated ? '✓' : '⚠ unverified'}`
-          : '';
+        const numInfo   = cardNumber ? ` · ${cardNumber}` : '';
+        const validated = match.fields.setValidated;
+        const setLabel  = setCode ? ` · ${setCode} ${validated ? '✓' : '⚠ unverified'}` : '';
+        const viaBanner = matchedBy === bannerName && matchedBy !== ocrName ? ' (via banner)' : '';
         statusEl.className = `scan-status scan-status--${validated || !setCode ? 'success' : 'warning'}`;
         statusEl.innerHTML =
           `<span class="scan-status__icon">${validated || !setCode ? '✓' : '◈'}</span>` +
-          `<span>Found on Riftcodex: <strong>${match.fields.name}</strong>${setLabel}${numInfo}</span>` +
+          `<span>Found on Riftcodex: <strong>${match.fields.name}</strong>${setLabel}${numInfo}${viaBanner}</span>` +
           `<span class="scan-status__badge">via API</span>`;
       } else {
-        // Riftcodex returned nothing — fall back to full OCR
+        // Both candidates failed — fall back to full-card OCR
         const { extractAllFields } = await import('../../services/CardOcrService');
         const ocr = await extractAllFields(file);
         this.#applyOcrFields(ocr);
-        const nameLabel = ocrName ? `"${ocrName}"` : 'unknown';
-        const setLabel  = setCode ? ` (set: ${setCode})` : '';
+        const tried = [ocrName, bannerName].filter(Boolean).map(n => `"${n}"`).join(', ');
         statusEl.className = 'scan-status scan-status--warning';
         statusEl.innerHTML =
           `<span class="scan-status__icon">◈</span>` +
-          `<span>No Riftcodex match for ${nameLabel}${setLabel} — fields read from image scan.</span>`;
+          `<span>No Riftcodex match for ${tried || 'unknown'} — partial fields from image. ` +
+          `Use the search box below to find the card manually.</span>`;
       }
     } catch (err) {
       statusEl.className = 'scan-status scan-status--error';
-      statusEl.textContent = 'Card scan failed — fill fields manually.';
+      statusEl.textContent = 'Card scan failed — use the search box below to find the card manually.';
       console.error('[CardScan]', err);
+    }
+  }
+
+  async #handleManualSearch(): Promise<void> {
+    const input    = document.getElementById('riftcodexSearch') as HTMLInputElement;
+    const statusEl = document.getElementById('scanStatus')!;
+    const query    = input.value.trim();
+    if (!query) return;
+
+    statusEl.className = 'scan-status scan-status--loading';
+    statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Searching Riftcodex…';
+
+    try {
+      const { fuzzySearchCard } = await import('../../services/RiftcodexService');
+      const match = await fuzzySearchCard(query);
+
+      if (match) {
+        this.#applyRiftcodexFields(match.fields);
+        statusEl.className = 'scan-status scan-status--success';
+        statusEl.innerHTML =
+          `<span class="scan-status__icon">✓</span>` +
+          `<span>Found: <strong>${match.fields.name}</strong></span>` +
+          `<span class="scan-status__badge">manual search</span>`;
+      } else {
+        statusEl.className = 'scan-status scan-status--error';
+        statusEl.textContent = `No Riftcodex result for "${query}" — fill fields manually.`;
+      }
+    } catch {
+      statusEl.className = 'scan-status scan-status--error';
+      statusEl.textContent = 'Search failed — check your connection.';
     }
   }
 

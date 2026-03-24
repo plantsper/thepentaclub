@@ -393,6 +393,34 @@
   flex-shrink: 0;
 }
 
+/* Manual Riftcodex search override */
+.scan-manual {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 10px;
+}
+
+.scan-manual input {
+  flex: 1;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.scan-manual input:focus {
+  border-color: var(--accent);
+}
+
+.scan-manual input::placeholder {
+  color: var(--text-muted);
+}
+
 /* Art upload */
 .art-upload {
   display: flex;

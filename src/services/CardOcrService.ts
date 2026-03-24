@@ -2,31 +2,32 @@
  * CardOcrService — Tesseract.js OCR for Riftbound card images.
  *
  * Strategy:
- *   1. Extract the card NAME from the title zone (fast, single-line OCR).
- *   2. Caller passes the name to RiftcodexService for a fuzzy API lookup.
- *   3. If the API returns nothing, fall back to `extractAllFields()` which
- *      scans every zone independently for a best-effort local parse.
+ *   1. Crop each zone from the image, then preprocess (grayscale + contrast)
+ *      before passing to Tesseract. This handles holographic foil, photos taken
+ *      at an angle, and colourful backgrounds that confuse raw OCR.
+ *   2. Scan BOTH the name zone AND the type banner to get two name candidates.
+ *      The banner ("CHAMPION UNIT • SORAKA • MOUNT TARGON") embeds the champion
+ *      name as the second bullet segment, which is often cleaner than the name
+ *      zone itself in real-world photos.
+ *   3. Try both candidates in Riftcodex; use whichever returns a match.
+ *   4. Fall back to full-card OCR when the API returns nothing.
  *
- * Zone coordinates are percentages of the image's natural dimensions so they
- * scale to any card resolution. Adjust CARD_ZONES if your card template
- * differs from the standard Riftbound portrait layout (≈ 744 × 1040 px).
+ *  ┌────────────────────────────────────────┐
+ *  │ [E]  [Domain]                [Might]  │  ← energyCost TL, might TR
+ *  │                                        │
+ *  │              Card Art                  │
+ *  │            (~62% of card)              │
+ *  │                                        │
+ *  ├── CHAMPION UNIT • SORAKA • MOUNT TARGON┤  ← typeBanner ~60-67%
+ *  │   Soraka                               │  ← name ~64-73%
+ *  │   WANDERER                             │    (subtitle line ignored)
+ *  │   Ability text…                        │  ← description ~73-90%
+ *  │   "Flavor text."                       │
+ *  │ SFD • 239/221     Loiza Chen           │  ← cardNumber ~91-95%
+ *  └────────────────────────────────────────┘
  *
- *  ┌────────────────────────────────────┐
- *  │ [Domain] [Domain]                  │  ← domain icons top-left (not numeric)
- *  │                                    │
- *  │           Card Art                 │
- *  │          (~65% of card)            │
- *  │                                    │
- *  ├── LEGEND • RENATA GLASC ───────────┤  ← typeBanner ~62-69% (gold strip)
- *  │   Chem-Baroness                    │  ← name ~70-78% (blue nameplate)
- *  │   Ability text line 1...           │  ← description ~78-92%
- *  │   Ability text line 2...           │
- *  │ SFD • 249/221    Envar Studio      │  ← cardNumber ~93-97% (bottom bar)
- *  └────────────────────────────────────┘
- *
- *  Legend / Ally cards: typeBanner, name, description, cardNumber.
- *  Unit-type cards may also have power / health stat zones (bottom corners).
- *  Energy cost may appear as a numeric icon if the card has a play cost.
+ *  Zones are fractions of the image dimensions — they scale to any resolution
+ *  and card orientation, but assume a portrait card (≈ 744 × 1040 px).
  */
 
 import type { CardType } from '../types/Card.types';
@@ -34,8 +35,8 @@ import type { CardType } from '../types/Card.types';
 // ── Zone definitions ─────────────────────────────────────────────────────────
 
 interface Zone {
-  top:    number; // fraction of image height
-  left:   number; // fraction of image width
+  top:    number;  // fraction of image height
+  left:   number;  // fraction of image width
   width:  number;
   height: number;
 }
@@ -43,32 +44,29 @@ interface Zone {
 /**
  * Fractional crop regions for each card field.
  *
- * Calibrated against the real Riftbound card layout (portrait, ~744 × 1040 px):
- *   - Art fills the top ~65% of the card.
- *   - typeBanner is the gold strip just above the name ("LEGEND • RENATA GLASC").
- *   - name is the blue nameplate below the type banner.
- *   - description is the white ability-text box below the name.
- *   - cardNumber lives in the bottom bar ("SFD • 249/221").
- *   - power / health are only present on unit-type cards (bottom corners).
- *   - energyCost may appear as a numeric play-cost icon; absent on some types.
+ * Calibrated from two real Riftbound cards:
+ *   Chem-Baroness (Legend) and Soraka – Wanderer (Champion Unit).
  *
- * Adjust these if your card template uses a different aspect ratio.
+ * Note: the name zone is deliberately wide (0.63-0.73) so it captures both
+ * card types even when the nameplate sits slightly higher or lower.
  */
 export const CARD_ZONES: Record<string, Zone> = {
-  typeBanner:  { top: 0.62, left: 0.04, width: 0.90, height: 0.07 },
-  name:        { top: 0.70, left: 0.04, width: 0.80, height: 0.08 },
-  description: { top: 0.78, left: 0.04, width: 0.92, height: 0.14 },
-  cardNumber:  { top: 0.93, left: 0.02, width: 0.45, height: 0.04 },
-  // Stat zones — only populated on Champion / Unit / Legend cards
-  power:       { top: 0.88, left: 0.02, width: 0.15, height: 0.07 },
-  health:      { top: 0.88, left: 0.83, width: 0.15, height: 0.07 },
-  // Energy cost icon — present on cards with a numeric play cost
-  // Spell, Rune, Gear, Battlefield may omit this or use 0
+  // Small italic strip: "CHAMPION UNIT • SORAKA • MOUNT TARGON"
+  typeBanner:  { top: 0.60, left: 0.03, width: 0.92, height: 0.06 },
+  // Large card name — starts just below the banner
+  name:        { top: 0.63, left: 0.03, width: 0.78, height: 0.10 },
+  description: { top: 0.73, left: 0.03, width: 0.94, height: 0.18 },
+  // "SFD • 239/221   Artist • ©2025RGI"
+  cardNumber:  { top: 0.91, left: 0.02, width: 0.45, height: 0.04 },
+  // Stat zones — present on Champion / Unit cards only
+  power:       { top: 0.87, left: 0.02, width: 0.14, height: 0.06 },
+  health:      { top: 0.87, left: 0.84, width: 0.14, height: 0.06 },
+  // Energy cost circle — top-left
   energyCost:  { top: 0.03, left: 0.02, width: 0.14, height: 0.12 },
 };
 
 /**
- * Riftbound type → our DB CardType mapping reference:
+ * Riftbound type → our DB CardType mapping:
  *   Champion, Legend, Unit, Unit Token  → 'Champion'
  *   Spell, Rune                         → 'Spell'
  *   Gear, Battlefield                   → 'Artifact'
@@ -78,9 +76,9 @@ export const CARD_ZONES: Record<string, Zone> = {
 
 export interface OcrNameResult {
   name:          string;
-  cardNumber?:   string;   // e.g. "246/221"
-  setCode?:      string;   // e.g. "SFD" from "SFD - 246/221"
-  collectorNum?: string;   // e.g. "246"
+  cardNumber?:   string;   // e.g. "239/221"
+  setCode?:      string;   // e.g. "SFD" from "SFD • 239/221"
+  collectorNum?: string;   // e.g. "239"
 }
 
 export interface OcrFullResult {
@@ -93,23 +91,77 @@ export interface OcrFullResult {
   cardNumber?:  string;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Preprocessing ─────────────────────────────────────────────────────────────
 
-async function imageDimensions(file: File): Promise<{ w: number; h: number }> {
+/**
+ * Crop a zone from the source image and apply grayscale + contrast enhancement.
+ * Returns an HTMLCanvasElement Tesseract can consume directly.
+ *
+ * Why:
+ *   - Holographic foil cards produce rainbow interference that confuses OCR.
+ *   - Grayscale eliminates colour noise.
+ *   - 2× upscale + contrast boost gives Tesseract more signal to work with.
+ *   - Cropping to the zone means Tesseract only sees the text we care about,
+ *     avoiding confusion from adjacent card elements.
+ */
+async function cropAndPreprocess(file: File, zone: Zone): Promise<HTMLCanvasElement> {
+  // Get image dimensions from a quick bitmap
   const bmp = await createImageBitmap(file);
-  const dims = { w: bmp.width, h: bmp.height };
+  const W = bmp.width, H = bmp.height;
   bmp.close();
-  return dims;
+
+  const px = {
+    left:   Math.round(zone.left   * W),
+    top:    Math.round(zone.top    * H),
+    width:  Math.round(zone.width  * W),
+    height: Math.round(zone.height * H),
+  };
+
+  // Load full image into a temporary canvas so we can crop it
+  const src = await createImageBitmap(file, px.left, px.top, px.width, px.height);
+
+  const scale  = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width  = src.width  * scale;
+  canvas.height = src.height * scale;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(src, 0, 0, canvas.width, canvas.height);
+  src.close();
+
+  // Grayscale + contrast
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const gray       = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const contrasted = Math.min(255, Math.max(0, (gray - 128) * 2.2 + 128));
+    d[i] = d[i + 1] = d[i + 2] = contrasted;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  return canvas;
 }
 
-function toPixelRect(zone: Zone, w: number, h: number) {
-  return {
-    top:    Math.round(zone.top    * h),
-    left:   Math.round(zone.left   * w),
-    width:  Math.round(zone.width  * w),
-    height: Math.round(zone.height * h),
-  };
+// ── Banner name extraction ────────────────────────────────────────────────────
+
+/**
+ * Pull the champion / card name out of the type banner text.
+ *
+ * Banner formats:
+ *   "CHAMPION UNIT • SORAKA • MOUNT TARGON"  → "SORAKA"   (segment 1)
+ *   "LEGEND • RENATA GLASC"                  → "RENATA GLASC" (segment 1)
+ *
+ * The champion name is always the segment immediately after the first bullet.
+ */
+function nameFromBanner(bannerText: string): string {
+  const segments = bannerText
+    .split(/[•·|]/)
+    .map(s => s.replace(/[^\w\s'\-]/g, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return segments[1] ?? '';
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseNumber(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
@@ -117,42 +169,47 @@ function parseNumber(raw: string | undefined): number | undefined {
   return m ? parseInt(m[0], 10) : undefined;
 }
 
-// ── Primary export: extract name only (fast path) ────────────────────────────
+// ── Primary export: extract name candidates ───────────────────────────────────
 
 /**
- * Run OCR on just the name zone (and card-number zone).
- * This is the fast path: caller then hands the name off to RiftcodexService.
+ * Fast path: OCR the name zone AND the type banner, returning up to two name
+ * candidates plus the set code from the card number.
  *
- * Tesseract is lazy-imported so the WASM bundle (~10 MB) only loads when
- * the user actually selects an image for scanning.
+ * The caller (AdminPageComponent) tries both candidates against Riftcodex and
+ * uses whichever returns a match.
+ *
+ * Tesseract is lazy-imported so the WASM (~10 MB) only loads when a card is
+ * actually being scanned.
  */
-export async function extractCardName(file: File): Promise<OcrNameResult> {
-  const { w, h } = await imageDimensions(file);
-
-  // Lazy-load Tesseract to keep initial bundle small
+export async function extractCardName(file: File): Promise<OcrNameResult & { bannerName?: string }> {
   const { createWorker, PSM } = await import('tesseract.js');
   const worker = await createWorker('eng');
 
   try {
-    // Name zone — treat as a single text line for best accuracy
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE });
-    const nameRect = toPixelRect(CARD_ZONES.name, w, h);
-    const { data: nameData } = await worker.recognize(file, { rectangle: nameRect });
 
-    // Card number zone — also single line
-    const numRect = toPixelRect(CARD_ZONES.cardNumber, w, h);
-    const { data: numData } = await worker.recognize(file, { rectangle: numRect });
+    // ── Name zone ──────────────────────────────────────────────────────────
+    const nameCanvas  = await cropAndPreprocess(file, CARD_ZONES.name);
+    const { data: nd } = await worker.recognize(nameCanvas);
+    const rawName      = nd.text.trim();
+    // Take only the first line (ignores subtitle like "WANDERER")
+    const nameLine     = rawName.split('\n')[0] ?? rawName;
+    const name         = nameLine.replace(/[^\w\s'\-,.:!?]/g, '').replace(/\s+/g, ' ').trim();
 
-    const rawName   = nameData.text.trim();
-    const rawNumber = numData.text.trim();
+    // ── Type banner zone ───────────────────────────────────────────────────
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+    const bannerCanvas  = await cropAndPreprocess(file, CARD_ZONES.typeBanner);
+    const { data: bd }  = await worker.recognize(bannerCanvas);
+    const bannerName    = nameFromBanner(bd.text);
 
-    // Strip OCR noise from name (keep letters, digits, common punctuation)
-    const name = rawName.replace(/[^\w\s'\-,.:!?]/g, '').replace(/\s+/g, ' ').trim();
+    // ── Card number zone ───────────────────────────────────────────────────
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE });
+    const numCanvas   = await cropAndPreprocess(file, CARD_ZONES.cardNumber);
+    const { data: cnd } = await worker.recognize(numCanvas);
+    const rawNumber   = cnd.text.trim();
 
-    // Card code format: "SFD • 249/221" or "SFD - 249/221" or "SFD•249/221"
-    // Bullet (•), en-dash (–), dash (-) are all valid separators between set code and number.
+    // Parse "SFD • 239/221" — bullet, dash, or en-dash as separator
     const cardNumMatch = rawNumber.match(/([A-Z]{2,5})\s*[•·\-–]\s*(\d+)[/](\d+)/i);
-
     let setCode:      string | undefined;
     let collectorNum: string | undefined;
     let cardNumber:   string | undefined;
@@ -162,12 +219,11 @@ export async function extractCardName(file: File): Promise<OcrNameResult> {
       collectorNum = cardNumMatch[2];
       cardNumber   = `${cardNumMatch[2]}/${cardNumMatch[3]}`;
     } else {
-      // Fallback: bare "NNN/TTT" without set prefix
       const simpleMatch = rawNumber.match(/\d{1,3}[/]\d{1,3}/);
       cardNumber = simpleMatch?.[0];
     }
 
-    return { name, cardNumber, setCode, collectorNum };
+    return { name, bannerName: bannerName || undefined, cardNumber, setCode, collectorNum };
   } finally {
     await worker.terminate();
   }
@@ -177,50 +233,32 @@ export async function extractCardName(file: File): Promise<OcrNameResult> {
 
 /**
  * Full-card OCR — used as fallback when the Riftcodex API returns no result.
- * Each zone is scanned with an appropriate PSM for best-effort field extraction.
+ * All zones are preprocessed before OCR.
  */
 export async function extractAllFields(file: File): Promise<OcrFullResult> {
-  const { w, h } = await imageDimensions(file);
-
   const { createWorker, PSM } = await import('tesseract.js');
   const worker = await createWorker('eng');
-
   const raw: Record<string, string> = {};
 
   try {
-    // Numeric zones: single-line mode
-    const numericZones = ['energyCost', 'power', 'health', 'cardNumber', 'name'];
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE });
-    for (const zone of numericZones) {
-      const rect = toPixelRect(CARD_ZONES[zone], w, h);
-      const { data } = await worker.recognize(file, { rectangle: rect });
-      raw[zone] = data.text.trim();
+    for (const zone of ['energyCost', 'power', 'health', 'cardNumber', 'name'] as const) {
+      const canvas    = await cropAndPreprocess(file, CARD_ZONES[zone]);
+      const { data }  = await worker.recognize(canvas);
+      raw[zone]       = data.text.split('\n')[0]?.trim() ?? '';
     }
 
-    // Block text zones: paragraph mode
-    const blockZones = ['typeBanner', 'description'];
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
-    for (const zone of blockZones) {
-      const rect = toPixelRect(CARD_ZONES[zone], w, h);
-      const { data } = await worker.recognize(file, { rectangle: rect });
-      raw[zone] = data.text.trim();
+    for (const zone of ['typeBanner', 'description'] as const) {
+      const canvas    = await cropAndPreprocess(file, CARD_ZONES[zone]);
+      const { data }  = await worker.recognize(canvas);
+      raw[zone]       = data.text.trim();
     }
   } finally {
     await worker.terminate();
   }
 
-  // ── Parse results ──────────────────────────────────────────────────────────
-
-  const name = raw.name
-    ?.replace(/[^\w\s'\-,.:!?]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim() || undefined;
-
-  // typeBanner format: "LEGEND • RENATA GLASC" — type is the word(s) before the bullet.
-  // Map Riftbound card types → our DB CardType (Champion | Spell | Artifact).
-  //   Champion-like: Champion, Legend, Unit, Unit Token
-  //   Spell-like:    Spell, Rune
-  //   Artifact-like: Gear, Battlefield
+  // Parse type from banner
   const bannerRaw = raw.typeBanner ?? '';
   const typeWord  = (bannerRaw.split(/[•·]/)[0] ?? bannerRaw).trim().toLowerCase();
   const type: CardType | undefined =
@@ -229,17 +267,15 @@ export async function extractAllFields(file: File): Promise<OcrFullResult> {
     : ['gear', 'battlefield'].some(t => typeWord.includes(t))         ? 'Artifact'
     : undefined;
 
-  const description = raw.description?.replace(/\s+/g, ' ').trim() || undefined;
-
-  const cardNumMatch = (raw.cardNumber ?? '').match(/\d{1,3}[/\-]\d{1,3}/);
+  const cardNumMatch = (raw.cardNumber ?? '').match(/\d{1,3}[/]\d{1,3}/);
 
   return {
-    name,
+    name:        raw.name?.replace(/[^\w\s'\-,.:!?]/g, '').replace(/\s+/g, ' ').trim() || undefined,
     type,
-    description,
-    manaCost:   parseNumber(raw.energyCost),
-    attack:     parseNumber(raw.power),
-    defense:    parseNumber(raw.health),
-    cardNumber: cardNumMatch?.[0],
+    description: raw.description?.replace(/\s+/g, ' ').trim() || undefined,
+    manaCost:    parseNumber(raw.energyCost),
+    attack:      parseNumber(raw.power),
+    defense:     parseNumber(raw.health),
+    cardNumber:  cardNumMatch?.[0],
   };
 }
