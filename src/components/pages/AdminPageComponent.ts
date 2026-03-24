@@ -100,15 +100,15 @@ export class AdminPageComponent extends Component {
               <select id="fSet"></select>
             </div>
             <div class="form-group">
-              <label for="fMana">Mana Cost</label>
+              <label for="fMana">Energy Cost</label>
               <input type="number" id="fMana" min="0" max="20" value="3">
             </div>
             <div class="form-group">
-              <label for="fAttack">Attack</label>
+              <label for="fAttack">Power</label>
               <input type="number" id="fAttack" min="0" max="99" value="0">
             </div>
             <div class="form-group">
-              <label for="fDefense">Defense</label>
+              <label for="fDefense">Health</label>
               <input type="number" id="fDefense" min="0" max="99" value="0">
             </div>
             <div class="form-group">

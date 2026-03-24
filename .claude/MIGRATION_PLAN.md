@@ -412,6 +412,14 @@ src/
 22. ✅ Bug fix: tsconfig missing vite/client types
 23. ✅ Bug fix: vite.config.ts missing envDir (env vars not found at build)
 24. ✅ Bug fix: Supabase client lazy init (crash before App try/catch)
+25. ✅ Auth system — email/password login, forgot password, password reset via email link
+26. ✅ Admin CMS page — card CRUD, image upload, set/tag management (auth-gated)
+27. ✅ Supabase singleton (supabaseClient.ts) — shared client for auth + card + admin operations
+28. ✅ Auth-aware NavComponent — subtle Admin link when logged out, Admin + Logout when logged in
+29. ✅ Relational schema (004) — card_rarities, card_sets, tags, card_tags junction; backfilled from old string columns
+30. ✅ IRarity, ICardSet, ITag interfaces replacing string union types
+31. ✅ Dynamic rarity filter buttons on Cards page (sorted by sortOrder, no hardcoding)
+32. ✅ Riftbound stat terminology — Attack→Power, Defense→Health, Mana→Energy
 
 ## Expected Benefits
 

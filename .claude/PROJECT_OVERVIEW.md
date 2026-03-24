@@ -1,295 +1,321 @@
-# The Pentaclub - Riftbound TCG Project
+# The Pentaclub — Riftbound TCG Project
 
 ## Project Overview
 
-A single-page application (SPA) for **Riftbound TCG**, a collectible trading card game set in the League of Legends / Runeterra universe. The application includes a card collection system with filtering, searching, lightbox detail views, and a Supabase-backed data layer with image hosting.
+A single-page application (SPA) for **Riftbound TCG**, a collectible trading card game set in the League of Legends / Runeterra universe. The application includes a card collection system with filtering, searching, lightbox detail views, a Supabase-backed data layer with image hosting, and a password-protected admin CMS for managing cards, sets, and tags.
+
+---
 
 ## Core Functionality
 
-### 1. **Application Architecture**
-- **Pattern**: Object-Oriented Programming (OOP) with TypeScript classes
-- **Routing**: Hash-based SPA routing (`#/`, `#/cards`, `#/about`)
-- **State Management**: Event-driven architecture using EventEmitter pattern
+### 1. Application Architecture
+- **Pattern**: OOP with TypeScript classes
+- **Routing**: Hash-based SPA (`#/`, `#/cards`, `#/about`, `#/login`, `#/admin`, `#/reset-password`)
+- **State Management**: Event-driven via EventEmitter (`card:open`, etc.)
 - **Rendering**: Component-based UI with manual DOM manipulation
-- **Data Layer**: Supabase (PostgreSQL + PostgREST REST API), with hardcoded sample data fallback
-- **App Init**: Async — shows loading spinner, fetches cards from Supabase, falls back to `sampleData.ts` on error
+- **Data Layer**: Supabase (PostgreSQL + PostgREST), relational schema, with hardcoded sample data fallback
+- **Auth**: Supabase Auth — email/password, forgot password, password reset via email link
+- **App Init**: Async — loads cards + session in parallel, falls back to sample data on Supabase error
 
-### 2. **Data Models**
+---
+
+### 2. Data Models
 
 #### Card Model (`src/models/Card.ts`)
-Represents individual trading cards:
-- `id`: Unique identifier (UUID from Supabase)
-- `name`: Card name
-- `type`: Card type (`Champion` | `Spell` | `Artifact`)
-- `rarity`: Rarity level (`Legendary` | `Epic` | `Rare` | `Common`)
-- `manaCost`: Mana cost to play the card
-- `attack`: Attack value (0 for non-combat cards)
-- `defense`: Defense value (0 for non-combat cards)
-- `description`: Flavor/ability text
-- `artGradient`: CSS gradient fallback for card artwork
-- `artUrl?`: Optional Supabase Storage public URL for card image
-- `set`: Expansion set name
-- `rarityClass` (getter): CSS class string for rarity badge styling
+| Property | Type | Description |
+|---|---|---|
+| `id` | `string` | UUID from Supabase |
+| `name` | `string` | Card name |
+| `type` | `CardType` | `'Champion' \| 'Spell' \| 'Artifact'` |
+| `rarity` | `IRarity` | `{ id, name, sortOrder, colorHex }` — from `card_rarities` table |
+| `manaCost` | `number` | **Energy** cost to play (Riftbound terminology) |
+| `attack` | `number` | **Power** stat — displayed as "Power" in UI |
+| `defense` | `number` | **Health** stat — displayed as "Health" in UI |
+| `description` | `string` | Flavor/ability text |
+| `artGradient` | `string` | CSS gradient fallback when no image |
+| `artUrl?` | `string` | Supabase Storage public URL |
+| `set` | `ICardSet` | `{ id, name, slug, description }` — from `card_sets` table |
+| `tags` | `ITag[]` | `{ id, name }[]` — from `card_tags` junction |
+| `rarityClass` | getter | CSS class based on `rarity.name` |
+
+#### TypeScript Interfaces (`src/types/Card.types.ts`)
+```typescript
+CardType = 'Champion' | 'Spell' | 'Artifact'
+
+IRarity  = { id: number; name: string; sortOrder: number; colorHex: string }
+ICardSet = { id: number; name: string; slug: string; description: string }
+ITag     = { id: number; name: string }
+```
+Rarity and set are no longer union types — they are relational objects fetched from the DB.
 
 #### CardCollection Model (`src/models/CardCollection.ts`)
-Manages the complete card collection:
-- `all`: Returns all cards
-- `count`: Total card count
-- `add(card)`: Add new card to collection
-- `filterByRarity(rarity)`: Filter cards by rarity
-- `filterByType(type)`: Filter cards by type
-- `search(query)`: Search cards by name, type, or description
+- `all`: All cards
+- `count`: Total count
+- `add(card)`: Adds a card
+- `filterByRarity(rarityName: string | 'all')`: Filters by `rarity.name` (case-insensitive)
+- `filterByType(type)`: Filters by type string
+- `search(query)`: Searches name, type, description
 
-### 3. **Routing System**
+---
 
-#### Router Class (`src/services/Router.ts`)
-- Hash-based navigation
-- Route registration with handlers
-- Navigation method for programmatic routing
-- Hash change event listener
+### 3. Routing
 
-**Registered Routes:**
-- `/` — Home page
-- `/cards` — Cards collection page
-- `/about` — About page
+| Route | Component | Auth |
+|---|---|---|
+| `#/` | Home | Public |
+| `#/cards` | Cards collection | Public |
+| `#/about` | Riftbound lore | Public |
+| `#/login` | Login + forgot password | Redirects to `/admin` if already logged in |
+| `#/admin` | Admin CMS | Redirects to `/login` if not authenticated |
+| `#/reset-password` | Set new password | Shown automatically when recovery link is clicked |
 
-### 4. **Component Architecture**
+---
 
-#### Base Component (`src/components/base/Component.ts`)
-- `_container`: DOM container reference
-- `render()`: Abstract method returning HTML string
-- `mount()`: Renders and inserts HTML into container
-- `afterMount()`: Lifecycle hook for post-render event listeners
-- `destroy()`: Cleanup method
+### 4. Component Architecture
+
+#### Base (`src/components/base/Component.ts`)
+Abstract class with `render()`, `mount()`, `afterMount()`, `destroy()`.
 
 #### Navigation (`src/components/layout/NavComponent.ts`)
-- Fixed header navigation
-- Mobile responsive menu toggle
-- Active route highlighting
-- Scroll-based styling changes
+- Accepts `isLoggedIn: boolean` and `onLogout: () => void`
+- When **logged out**: shows subtle low-opacity "Admin" link + "Browse Cards" CTA
+- When **logged in**: shows "Admin" link + "Logout" button (outline style)
+- Mobile responsive toggle, scroll-based styling
 
-#### Hero (`src/components/home/HeroComponent.ts`)
-- Full-screen hero section
-- Animated badge with pulsing dot
-- Gradient accent text
-- CTA buttons
-- 20 floating particle animations
-
-#### Stats (`src/components/home/StatsComponent.ts`)
-- Grid-based statistics display
-- Configurable `IStat[]` array
-
-#### Features (`src/components/home/FeaturesComponent.ts`)
-- Feature cards grid
-- Staggered entrance animations
-- Three icon color variants (green, blue, purple)
+#### Hero, Stats, Features, CTA, Footer
+Unchanged from original migration — static content components.
 
 #### Card Grid (`src/components/home/CardGridComponent.ts`)
 - Displays first 8 cards as homepage preview
-- Supports image (`artUrl`) with gradient fallback
-- Hover zoom on both image and gradient art
-- Click delegates to emit `card:open` event → opens lightbox
-
-#### CTA (`src/components/home/CTAComponent.ts`)
-- Call-to-action section with animated rotating gradient background
-
-#### Footer (`src/components/layout/FooterComponent.ts`)
-- Multi-column layout (Game, Community, Support)
-- Brand information and copyright
+- Click delegation → emits `card:open` → opens lightbox
+- Renders `card.rarity.name`, `card.set.name`
 
 #### Cards Page (`src/components/pages/CardsPageComponent.ts`)
-- Full card collection display
-- Real-time search (by name/type)
-- Rarity filter buttons (All, Legendary, Epic, Rare, Common)
-- Empty state handling
-- Click delegates to emit `card:open` event → opens lightbox
-
-#### About Page (`src/components/pages/AboutPageComponent.ts`)
-- Riftbound lore copy (based on official Riot Games Riftbound TCG)
-- References real sets, champions, Domains, Runeterra regions
-- Stats grid: 6 Domains, 500+ cards, 40+ Champions
+- Full collection with real-time search and rarity filter
+- Filter buttons are **dynamic** — derived from `collection.all` sorted by `rarity.sortOrder`
+- No hardcoded rarity names in HTML
+- Click delegation → emits `card:open`
 
 #### Card Lightbox (`src/components/shared/CardLightboxComponent.ts`)
 - Global modal mounted once in `App.ts`
-- Listens for `card:open` events via EventEmitter
+- Listens for `card:open` via EventEmitter
 - Two-panel layout: art (left) + details (right)
-- Shows: set, name, type badge, description, attack/defense/mana stats, rarity bar
-- Supports `artUrl` image with gradient fallback
-- Close via backdrop click, X button, or Escape key
-- Smooth fade + scale animation; mobile collapses to bottom sheet
-- Locks body scroll while open
+- Stat labels use **Riftbound terminology**: Power, Health, Energy (not Attack, Defense, Mana)
+- Rarity color comes from `card.rarity.colorHex` (DB-driven, not hardcoded)
+- Close via backdrop, X button, or Escape
 
-### 5. **Services**
+#### Login Page (`src/components/pages/LoginPageComponent.ts`)
+- Email/password login form
+- "Forgot password?" toggle shows forgot-password form in same card
+- On success: calls `onLogin()` callback → App fetches session → navigates to `/admin`
+- Error messages per-field
 
-#### EventEmitter (`src/services/EventEmitter.ts`)
-- `on(event, fn)`: Register event listener
-- `emit(event, data)`: Fire event with payload
-- Used for `card:open` event between card grids and lightbox
+#### Reset Password Page (`src/components/pages/ResetPasswordPageComponent.ts`)
+- Shown when user clicks the Supabase password-reset email link
+- App detects `PASSWORD_RECOVERY` event from `onAuthStateChange` → navigates to `#/reset-password`
+- Calls `supabase.auth.updateUser({ password })` with confirmation field validation
 
-#### Router (`src/services/Router.ts`)
-- Hash-based SPA routing
+#### Admin Page (`src/components/pages/AdminPageComponent.ts`)
+- **Auth-gated**: App.ts redirects to `/login` if no session
+- Fetches lookup tables (`card_rarities`, `card_sets`, `tags`) from DB on mount
+- **Sets section**: chips showing current sets with delete, inline form to add new set
+- **Tags section**: chips showing current tags with delete, inline form to add new tag
+- **Card table**: Name, Type, Rarity, Set, Tags, Art (✓/—), Edit/Delete actions
+- **Add/Edit form**: all card fields; rarity and set selects are DB-driven; tags are checkboxes; image upload to Supabase Storage
+- Tag sync on save: deletes all existing `card_tags` for the card, re-inserts selected ones
 
-#### CardService (`src/services/CardService.ts`)
-- `fetchCards()`: Queries Supabase `cards` table, maps snake_case rows to `ICard` objects
-- Lazily creates Supabase client (inside function, not at module level)
-- Guards for missing env vars — throws `'Supabase env vars not set'` caught by App fallback
-- Maps `art_url` (nullable DB column) to `artUrl?: string`
+---
 
-### 6. **Utilities**
+### 5. Services
 
-#### ScrollAnimator (`src/utils/ScrollAnimator.ts`)
-- Intersection Observer-based scroll animations
-- Triggers `.visible` class on `.stagger-in` elements
+#### `supabaseClient.ts`
+Lazy singleton — `getSupabaseClient()` creates the client once and reuses it. Auth session persists because the same client instance manages localStorage token storage.
 
-#### sampleData (`src/utils/sampleData.ts`)
-- 16 hardcoded cards used as fallback when Supabase is unavailable
-- 4 sets × 4 rarities
+#### `AuthService.ts`
+| Function | Description |
+|---|---|
+| `signIn(email, password)` | Calls `signInWithPassword`, returns session |
+| `signOut()` | Ends session |
+| `sendPasswordReset(email)` | Sends reset email with `redirectTo: window.location.origin` |
+| `updatePassword(newPassword)` | Updates password for currently-authenticated user |
+| `getSession()` | Returns current session or null |
+| `onAuthStateChange(callback)` | Fires on LOGIN, LOGOUT, PASSWORD_RECOVERY |
 
-### 7. **Database — Supabase**
+#### `CardService.ts`
+Uses nested Supabase select to fetch cards with joined rarity, set, and tags in a single query:
+```typescript
+.from('cards')
+.select('*, card_rarities(id,name,sort_order,color_hex), card_sets(id,name,slug,description), card_tags(tags(id,name))')
+```
 
-#### Connection
-- `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env.local`
-- Vite `envDir: '../'` required because `root` is `./src`
+#### `EventEmitter.ts` / `Router.ts`
+Unchanged.
 
-#### Cards Table (`supabase/migrations/001_create_cards_table.sql`)
-Columns: `id` (UUID PK), `name`, `type`, `rarity`, `mana_cost`, `attack`, `defense`, `description`, `art_gradient`, `set_name`, `art_url` (nullable), `created_at`
+---
 
-Row Level Security:
-- Public: SELECT only
-- Authenticated: full CRUD (admin use via Supabase Studio)
+### 6. Database — Supabase
 
-#### Storage (`supabase/migrations/003_add_art_url.sql`)
-- Bucket: `card-art` (public)
-- Max file size: 5 MB
-- Allowed types: JPEG, PNG, WebP, GIF
-- Same RLS pattern: public read, auth write
+#### Tables
+
+| Table | Purpose |
+|---|---|
+| `cards` | Card catalog — `id`, `name`, `type`, `rarity_id` (FK), `set_id` (FK), `mana_cost`, `attack`, `defense`, `description`, `art_gradient`, `art_url`, `created_at` |
+| `card_rarities` | Lookup — `id`, `name`, `sort_order`, `color_hex` |
+| `card_sets` | Lookup — `id`, `name`, `slug`, `released`, `description` |
+| `tags` | Lookup — `id`, `name` |
+| `card_tags` | Junction — `card_id` (FK), `tag_id` (FK) |
+
+#### Row Level Security
+All tables: `SELECT` public, `ALL` authenticated only.
 
 #### CMS Workflow
-Supabase Studio table editor is the primary CMS:
-- Add/edit/delete cards in Table Editor
-- Upload card art in Storage → copy public URL → paste into `art_url`
+- **Cards**: Admin page at `#/admin` (email/password login required)
+- **Card art**: Upload in admin form → goes to Supabase Storage `card-art` bucket → public URL stored in `art_url`
+- **Direct edits**: Supabase Studio table editor (fallback)
 
-### 8. **Design System**
+#### Migrations
+| File | Description |
+|---|---|
+| `001_create_cards_table.sql` | `cards` table + RLS |
+| `002_seed_cards.sql` | 16 sample cards |
+| `003_add_art_url.sql` | `art_url` column + `card-art` storage bucket |
+| `004_relational_schema.sql` | `card_rarities`, `card_sets`, `tags`, `card_tags`; backfills + drops old string columns |
+
+---
+
+### 7. Riftbound Stat Terminology
+
+Based on the official Riftbound TCG rules, the UI uses Riftbound-accurate stat names:
+
+| DB column | Internal property | UI label | Riftbound meaning |
+|---|---|---|---|
+| `mana_cost` | `manaCost` | **Energy** | Colorless cost to play the card |
+| `attack` | `attack` | **Power** | Card's offensive output |
+| `defense` | `defense` | **Health** | Card's durability / damage absorption |
+
+> In the real game, Might is a single combined combat stat. Our DB stores them separately for design flexibility.
+
+---
+
+### 8. Design System
 
 #### Color Palette
-- **Backgrounds**: `--bg-deep: #060a10` → `--bg-elevated: #1e3350`
-- **Accent Primary**: `--accent: #00e68a` (cyan-green)
-- **Accent Secondary**: `--accent-secondary: #00c4ff` (blue)
-- **Accent Tertiary**: `--accent-tertiary: #a855f7` (purple)
-- **Text**: `--text-primary: #e8ecf4` → `--text-muted: #566380`
+- `--bg-deep: #060a10` → `--bg-elevated: #1e3350`
+- `--accent: #00e68a` (cyan-green)
+- `--accent-secondary: #00c4ff` (blue)
+- `--accent-tertiary: #a855f7` (purple)
+- `--text-primary: #e8ecf4` → `--text-muted: #566380`
 
 #### Typography
 - **Display/Body**: Outfit (sans-serif)
-- **Accent**: Crimson Pro (serif, used for card descriptions and lore text)
+- **Accent**: Crimson Pro (serif — card descriptions, lore text)
 
-#### CSS Structure (`src/styles/`)
+#### CSS Structure
 ```
-_variables.css       CSS custom properties
-_base.css            Reset & body styles
-_backgrounds.css     Animated mesh gradient + grid overlay
-_common.css          Section headers, buttons
-_utilities.css       Page transitions, stagger-in, @keyframes spin, responsive
-components/
-  nav.css
-  hero.css
-  stats.css
-  features.css
-  cards.css          Card grid, card art (img + gradient), rarity badges
-  lightbox.css       Modal overlay, dialog layout, art panel, body panel
-  cta.css
-  footer.css
-main.css             @import all of the above
+src/styles/
+├── _variables.css
+├── _base.css
+├── _backgrounds.css
+├── _common.css
+├── _utilities.css        @keyframes spin, stagger-in, responsive
+├── components/
+│   ├── nav.css           + .nav__cta--outline, .nav__link--muted
+│   ├── hero.css
+│   ├── stats.css
+│   ├── features.css
+│   ├── cards.css
+│   ├── lightbox.css
+│   ├── cta.css
+│   ├── footer.css
+│   ├── auth.css          Login, ResetPassword page styles
+│   └── admin.css         Admin page, lookup chips, tag checkboxes
+└── main.css              @import all
 ```
 
-### 9. **App Initialization Flow**
+---
 
-1. Show loading spinner (CSS `@keyframes spin`)
-2. Call `fetchCards()` from CardService
-   - On success: populate `CardCollection` from Supabase
-   - On error (no env vars / network): fall back to `createSampleCards()`
-3. Build full app skeleton (bg-mesh, grid-overlay, nav, pages, footer, lightbox)
-4. Mount `NavComponent`, `FooterComponent`, `CardLightboxComponent`
-5. Register routes (`/`, `/cards`, `/about`) and start Router
-6. On route change: update nav active state, hide all pages, scroll to top, mount page component
+### 9. App Initialization Flow
 
-### 10. **Project Structure**
+1. Show loading spinner
+2. `Promise.all([fetchCards(), getSession()])` — in parallel
+   - Cards: Supabase nested select → `CardCollection`
+   - Session: checked from localStorage via Supabase client
+   - On any error: fall back to `createSampleCards()`, `session = null`
+3. Set up `onAuthStateChange` listener
+   - `PASSWORD_RECOVERY` event → navigate to `#/reset-password`
+   - Any session change → re-mount nav with updated auth state
+4. Build HTML skeleton (nav, pages, footer, lightbox mounts)
+5. Mount `NavComponent(isLoggedIn, onLogout)`, `FooterComponent`, `CardLightboxComponent`
+6. Register routes and start Router
+7. On route change: update nav active state, hide all pages, scroll to top, mount page component
+   - `/admin` → redirects to `/login` if no session
+   - `/login` → redirects to `/admin` if session exists
+
+---
+
+### 10. Project Structure
 
 ```
-thepentaclub/
-├── src/
+src/
+├── components/
+│   ├── base/Component.ts
+│   ├── home/
+│   │   ├── HeroComponent.ts
+│   │   ├── StatsComponent.ts
+│   │   ├── FeaturesComponent.ts
+│   │   ├── CardGridComponent.ts
+│   │   └── CTAComponent.ts
+│   ├── layout/
+│   │   ├── NavComponent.ts         auth-aware (isLoggedIn param)
+│   │   └── FooterComponent.ts
+│   ├── pages/
+│   │   ├── CardsPageComponent.ts   dynamic rarity filters
+│   │   ├── AboutPageComponent.ts
+│   │   ├── LoginPageComponent.ts   login + forgot password
+│   │   ├── ResetPasswordPageComponent.ts
+│   │   └── AdminPageComponent.ts   full CMS
+│   └── shared/
+│       └── CardLightboxComponent.ts
+├── models/
+│   ├── Card.ts                     rarity: IRarity, set: ICardSet, tags: ITag[]
+│   └── CardCollection.ts           filterByRarity uses rarity.name
+├── services/
+│   ├── supabaseClient.ts           lazy singleton
+│   ├── AuthService.ts              signIn/Out/Reset/Update/getSession/onChange
+│   ├── CardService.ts              nested select query
+│   ├── EventEmitter.ts
+│   └── Router.ts
+├── styles/
 │   ├── components/
-│   │   ├── base/Component.ts
-│   │   ├── home/
-│   │   │   ├── HeroComponent.ts
-│   │   │   ├── StatsComponent.ts
-│   │   │   ├── FeaturesComponent.ts
-│   │   │   ├── CardGridComponent.ts
-│   │   │   └── CTAComponent.ts
-│   │   ├── layout/
-│   │   │   ├── NavComponent.ts
-│   │   │   └── FooterComponent.ts
-│   │   ├── pages/
-│   │   │   ├── CardsPageComponent.ts
-│   │   │   └── AboutPageComponent.ts
-│   │   └── shared/
-│   │       └── CardLightboxComponent.ts
-│   ├── models/
-│   │   ├── Card.ts
-│   │   └── CardCollection.ts
-│   ├── services/
-│   │   ├── CardService.ts          ← Supabase data fetching
-│   │   ├── EventEmitter.ts
-│   │   └── Router.ts
-│   ├── styles/
-│   │   ├── components/
-│   │   │   ├── cards.css
-│   │   │   ├── lightbox.css        ← new
-│   │   │   └── (others)
-│   │   └── main.css
-│   ├── types/
-│   │   ├── Card.types.ts           ← includes artUrl?
-│   │   ├── Component.types.ts
-│   │   ├── Event.types.ts
-│   │   ├── Router.types.ts
-│   │   └── index.ts
-│   ├── utils/
-│   │   ├── ScrollAnimator.ts
-│   │   └── sampleData.ts
-│   ├── App.ts                      ← async init, Supabase fallback
-│   ├── main.ts
-│   └── index.html
-├── supabase/
-│   └── migrations/
-│       ├── 001_create_cards_table.sql
-│       ├── 002_seed_cards.sql
-│       └── 003_add_art_url.sql
-├── .env.example
-├── .env.local                      ← not committed, holds real keys
-├── tsconfig.json                   ← includes "types": ["vite/client"]
-├── vite.config.ts                  ← envDir: '../'
-└── package.json
+│   │   ├── auth.css
+│   │   ├── admin.css
+│   │   └── ...
+│   └── main.css
+├── types/
+│   ├── Card.types.ts               IRarity, ICardSet, ITag, ICard, ICardCollection
+│   └── ...
+├── utils/
+│   ├── sampleData.ts               uses IRarity/ICardSet objects (not strings)
+│   └── ScrollAnimator.ts
+├── App.ts                          async init, auth state, 6 routes
+└── index.html
+supabase/
+└── migrations/
+    ├── 001_create_cards_table.sql
+    ├── 002_seed_cards.sql
+    ├── 003_add_art_url.sql
+    └── 004_relational_schema.sql
 ```
 
-### 11. **Dependencies**
+---
 
-```json
-{
-  "dependencies": {
-    "@supabase/supabase-js": "^2.100.0"
-  },
-  "devDependencies": {
-    "@types/node": "^25.5.0",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.2"
-  }
-}
-```
-
-### 12. **Known Gotchas**
+### 11. Known Gotchas
 
 | Issue | Fix |
 |---|---|
 | `import.meta.env` not typed | `"types": ["vite/client"]` in tsconfig |
-| Env vars not found at build time | `envDir: '../'` in vite.config.ts (root is `./src`) |
-| Supabase crashes before App try/catch | `createClient` moved inside `fetchCards()`, not at module level |
-| Card art zoom on hover | Applied to both `.tcg-card__art-img` and `.tcg-card__art-bg` |
+| Env vars undefined at build | `envDir: '../'` in vite.config.ts (root is `./src`) |
+| Supabase crashes before App try/catch | `createClient` in singleton, not at module level |
+| Password reset redirect blocked | Add Vercel domain to Supabase Auth → URL Configuration → Redirect URLs |
+| Supabase session not shared across service calls | All services use `getSupabaseClient()` singleton |
+| Admin account creation | Use Supabase Studio → Authentication → Users → Add user (no public sign-up) |

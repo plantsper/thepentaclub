@@ -58,8 +58,8 @@ export class CardLightboxComponent extends Component {
 
     const rc = card.rarity.colorHex;
 
-    const atkDisplay = card.attack > 0 ? card.attack : '—';
-    const defDisplay = card.defense > 0 ? card.defense : '—';
+    const powerDisplay  = card.attack  > 0 ? card.attack  : '—';
+    const healthDisplay = card.defense > 0 ? card.defense : '—';
 
     body.innerHTML = `
       <div class="lightbox__set">${card.set.name}</div>
@@ -71,18 +71,18 @@ export class CardLightboxComponent extends Component {
       <div class="lightbox__stats">
         <div class="lightbox__stat lightbox__stat--atk">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M14.7 2.3a1 1 0 0 0-1.4 0l-4.6 4.6L6 4.2a1 1 0 0 0-1.4 0L2.3 6.5a1 1 0 0 0 0 1.4L5 10.6l-2.3 2.3a1 1 0 0 0 0 1.4l6 6a1 1 0 0 0 1.4 0l2.3-2.3 2.7 2.7a1 1 0 0 0 1.4 0l2.3-2.3a1 1 0 0 0 0-1.4L16.1 14.3l4.6-4.6a1 1 0 0 0 0-1.4l-6-6z"/></svg>
-          <span>${atkDisplay}</span>
-          <label>Attack</label>
+          <span>${powerDisplay}</span>
+          <label>Power</label>
         </div>
         <div class="lightbox__stat lightbox__stat--def">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
-          <span>${defDisplay}</span>
-          <label>Defense</label>
+          <span>${healthDisplay}</span>
+          <label>Health</label>
         </div>
         <div class="lightbox__stat lightbox__stat--mana">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
           <span>${card.manaCost}</span>
-          <label>Mana</label>
+          <label>Energy</label>
         </div>
       </div>
       <div class="lightbox__rarity-bar" style="background:${rc}18;border-color:${rc}40">
