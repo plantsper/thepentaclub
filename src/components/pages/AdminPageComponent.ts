@@ -2,6 +2,29 @@ import { Component } from '../base/Component';
 import { getSupabaseClient } from '../../services/supabaseClient';
 import type { CardType } from '../../types';
 
+// Minimal shape used by #applyRiftcodexFields — mirrors RiftcodexMatch['fields']
+interface RiftcodexFields {
+  name?:        string;
+  type?:        string;
+  rarityName?:  string;
+  setName?:     string;
+  manaCost?:    number;
+  attack?:      number;
+  defense?:     number;
+  description?: string;
+  imageUrl?:    string;   // CDN URL from Riftcodex — skips manual art upload
+  tags:         string[];
+}
+
+interface OcrFields {
+  name?:        string;
+  type?:        CardType;
+  description?: string;
+  manaCost?:    number;
+  attack?:      number;
+  defense?:     number;
+}
+
 interface RarityOption  { id: number; name: string; sort_order: number }
 interface SetOption     { id: number; name: string; slug: string; description: string }
 interface TagOption     { id: number; name: string }
@@ -127,9 +150,10 @@ export class AdminPageComponent extends Component {
               <label>Card Art</label>
               <div class="art-upload">
                 <input type="file" id="fArtFile" accept="image/jpeg,image/png,image/webp,image/gif">
-                <span class="art-upload__label">JPEG/PNG/WebP, max 5 MB</span>
+                <span class="art-upload__label">JPEG/PNG/WebP, max 5 MB — card fields auto-fill on upload</span>
                 <div id="uploadStatus" class="art-upload__status hidden"></div>
               </div>
+              <div id="scanStatus" class="scan-status hidden"></div>
               <input type="text" id="fArtUrl" placeholder="or paste public image URL" style="margin-top:8px">
               <div id="artPreviewWrap" class="art-preview hidden">
                 <img id="artPreview" src="" alt="Art preview">
@@ -167,7 +191,12 @@ export class AdminPageComponent extends Component {
 
     document.getElementById('fArtFile')?.addEventListener('change', async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) await this.#handleImageUpload(file);
+      if (!file) return;
+      // Upload to Supabase Storage and OCR scan run in parallel
+      await Promise.all([
+        this.#handleImageUpload(file),
+        this.#handleCardScan(file),
+      ]);
     });
 
     document.getElementById('fArtUrl')?.addEventListener('input', (e) => {
@@ -501,6 +530,112 @@ export class AdminPageComponent extends Component {
     } finally {
       this.#uploadingArt = false;
     }
+  }
+
+  // ── Card scan pipeline ────────────────────────────────────────────────────
+
+  async #handleCardScan(file: File): Promise<void> {
+    const statusEl = document.getElementById('scanStatus')!;
+    statusEl.className = 'scan-status scan-status--loading';
+    statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Reading card…';
+
+    try {
+      // Step 1: OCR the name zone and card-number zone (fast path)
+      const { extractCardName } = await import('../../services/CardOcrService');
+      const { name: ocrName, setCode, cardNumber } = await extractCardName(file);
+
+      if (!ocrName) {
+        // Name extraction failed — run full fallback OCR
+        const { extractAllFields } = await import('../../services/CardOcrService');
+        const ocr = await extractAllFields(file);
+        this.#applyOcrFields(ocr);
+        statusEl.className = 'scan-status scan-status--warning';
+        statusEl.textContent = 'Could not read card name — partial fields filled from image.';
+        return;
+      }
+
+      // Step 2: Fuzzy search Riftcodex (pass set code for extra validation)
+      const { fuzzySearchCard } = await import('../../services/RiftcodexService');
+      const match = await fuzzySearchCard(ocrName, setCode);
+
+      if (match) {
+        this.#applyRiftcodexFields(match.fields);
+        const numInfo    = cardNumber ? ` · ${cardNumber}` : '';
+        const validated  = match.fields.setValidated;
+        const setLabel   = setCode
+          ? ` · ${setCode} ${validated ? '✓' : '⚠ unverified'}`
+          : '';
+        statusEl.className = `scan-status scan-status--${validated || !setCode ? 'success' : 'warning'}`;
+        statusEl.innerHTML =
+          `<span class="scan-status__icon">${validated || !setCode ? '✓' : '◈'}</span>` +
+          `<span>Found on Riftcodex: <strong>${match.fields.name}</strong>${setLabel}${numInfo}</span>` +
+          `<span class="scan-status__badge">via API</span>`;
+      } else {
+        // Riftcodex returned nothing — fall back to full OCR
+        const { extractAllFields } = await import('../../services/CardOcrService');
+        const ocr = await extractAllFields(file);
+        this.#applyOcrFields(ocr);
+        const nameLabel = ocrName ? `"${ocrName}"` : 'unknown';
+        const setLabel  = setCode ? ` (set: ${setCode})` : '';
+        statusEl.className = 'scan-status scan-status--warning';
+        statusEl.innerHTML =
+          `<span class="scan-status__icon">◈</span>` +
+          `<span>No Riftcodex match for ${nameLabel}${setLabel} — fields read from image scan.</span>`;
+      }
+    } catch (err) {
+      statusEl.className = 'scan-status scan-status--error';
+      statusEl.textContent = 'Card scan failed — fill fields manually.';
+      console.error('[CardScan]', err);
+    }
+  }
+
+  #applyRiftcodexFields(fields: RiftcodexFields): void {
+    if (fields.name)        (document.getElementById('fName')    as HTMLInputElement).value    = fields.name;
+    if (fields.type)        (document.getElementById('fType')    as HTMLSelectElement).value   = fields.type;
+    if (fields.description) (document.getElementById('fDesc')    as HTMLTextAreaElement).value = fields.description;
+    if (fields.manaCost  != null) (document.getElementById('fMana')    as HTMLInputElement).value = String(fields.manaCost);
+    if (fields.attack    != null) (document.getElementById('fAttack')  as HTMLInputElement).value = String(fields.attack);
+    if (fields.defense   != null) (document.getElementById('fDefense') as HTMLInputElement).value = String(fields.defense);
+
+    // Match rarity by name (case-insensitive)
+    if (fields.rarityName) {
+      const rn = fields.rarityName.toLowerCase();
+      const r  = this.#rarities.find(x => x.name.toLowerCase() === rn);
+      if (r) (document.getElementById('fRarity') as HTMLSelectElement).value = String(r.id);
+    }
+
+    // Match set: accept partial overlap in either direction
+    if (fields.setName) {
+      const sn  = fields.setName.toLowerCase();
+      const s   = this.#sets.find(
+        x => x.name.toLowerCase().includes(sn) || sn.includes(x.name.toLowerCase()),
+      );
+      if (s) (document.getElementById('fSet') as HTMLSelectElement).value = String(s.id);
+    }
+
+    // Auto-fill art URL from Riftcodex CDN (skips manual upload for official cards)
+    if (fields.imageUrl) {
+      (document.getElementById('fArtUrl') as HTMLInputElement).value = fields.imageUrl;
+      this.#updateArtPreview(fields.imageUrl);
+    }
+
+    // Check tag checkboxes whose label text matches any returned tag name
+    if (fields.tags.length > 0) {
+      const apiTagsLower = fields.tags.map(t => t.toLowerCase());
+      document.querySelectorAll<HTMLInputElement>('#tagsCheckboxes input[type="checkbox"]').forEach(cb => {
+        const label = cb.closest('label')?.querySelector('span')?.textContent?.toLowerCase() ?? '';
+        cb.checked  = apiTagsLower.some(t => label.includes(t) || t.includes(label));
+      });
+    }
+  }
+
+  #applyOcrFields(ocr: OcrFields): void {
+    if (ocr.name)        (document.getElementById('fName')    as HTMLInputElement).value    = ocr.name;
+    if (ocr.type)        (document.getElementById('fType')    as HTMLSelectElement).value   = ocr.type;
+    if (ocr.description) (document.getElementById('fDesc')    as HTMLTextAreaElement).value = ocr.description;
+    if (ocr.manaCost  != null) (document.getElementById('fMana')    as HTMLInputElement).value = String(ocr.manaCost);
+    if (ocr.attack    != null) (document.getElementById('fAttack')  as HTMLInputElement).value = String(ocr.attack);
+    if (ocr.defense   != null) (document.getElementById('fDefense') as HTMLInputElement).value = String(ocr.defense);
   }
 
   #updateArtPreview(url: string): void {
