@@ -75,13 +75,13 @@ export class CardLightboxComponent extends Component {
       art.innerHTML = `
         <img class="lightbox__art-img" src="${artSrc}" alt="${esc(card.name)}">
         <span class="tcg-card__rarity ${esc(card.rarityClass)}">${esc(card.rarity.name)}</span>
-        <span class="lightbox__mana">${card.manaCost}</span>
+        <span class="lightbox__price">$${card.price.toFixed(2)}</span>
       `;
     } else {
       art.style.background = card.artGradient;
       art.innerHTML = `
         <span class="tcg-card__rarity ${esc(card.rarityClass)}">${esc(card.rarity.name)}</span>
-        <span class="lightbox__mana">${card.manaCost}</span>
+        <span class="lightbox__price">$${card.price.toFixed(2)}</span>
       `;
     }
 
@@ -108,10 +108,10 @@ export class CardLightboxComponent extends Component {
           <span>${healthDisplay}</span>
           <label>Health</label>
         </div>
-        <div class="lightbox__stat lightbox__stat--mana">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-          <span>${card.manaCost}</span>
-          <label>Energy</label>
+        <div class="lightbox__stat lightbox__stat--price">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <span>$${card.price.toFixed(2)}</span>
+          <label>Price</label>
         </div>
       </div>
       <div class="lightbox__rarity-bar" style="background:${rc}18;border-color:${rc}40">

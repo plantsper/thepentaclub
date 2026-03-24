@@ -29,7 +29,7 @@ interface CardRow {
   id: string;
   name: string;
   type: CardType;
-  mana_cost: number;
+  price: number;
   attack: number;
   defense: number;
   description: string;
@@ -63,7 +63,7 @@ export async function fetchCards(): Promise<ICard[]> {
       sortOrder: row.card_rarities.sort_order,
       colorHex: row.card_rarities.color_hex,
     },
-    row.mana_cost,
+    Number(row.price),
     row.attack,
     row.defense,
     row.description,

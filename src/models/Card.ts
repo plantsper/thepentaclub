@@ -6,7 +6,7 @@ export class Card implements ICard {
     public readonly name: string,
     public readonly type: CardType,
     public readonly rarity: IRarity,
-    public readonly manaCost: number,
+    public readonly price: number,
     public readonly attack: number,
     public readonly defense: number,
     public readonly description: string,

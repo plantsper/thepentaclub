@@ -24,7 +24,7 @@ export interface ICard {
   name: string;
   type: CardType;
   rarity: IRarity;
-  manaCost: number;
+  price: number;
   attack: number;
   defense: number;
   description: string;

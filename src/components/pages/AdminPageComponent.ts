@@ -28,7 +28,7 @@ interface AdminCard {
   type: CardType;
   rarity_id: number;
   set_id: number;
-  mana_cost: number;
+  price: number;
   attack: number;
   defense: number;
   description: string;
@@ -46,6 +46,7 @@ export class AdminPageComponent extends Component {
   #allTags: TagOption[]     = [];
   #editingId: string | null = null;
   #uploadingArt             = false;
+  #selectedIds: Set<string> = new Set();
 
   // Typed getElementById that throws if the element is missing — safer than `!` casts.
   #el<T extends HTMLElement>(id: string): T {
@@ -93,6 +94,20 @@ export class AdminPageComponent extends Component {
         <!-- ── Card toolbar ───────────────────────────────────────────── -->
         <div class="admin-toolbar">
           <button class="admin-btn admin-btn--primary" id="addCardBtn">+ Add Card</button>
+          <button class="admin-btn admin-btn--ghost"   id="bulkAddBtn">Bulk Import</button>
+          <button class="admin-btn admin-btn--danger hidden" id="bulkDeleteBtn">Delete selected (<span id="bulkDeleteCount">0</span>)</button>
+        </div>
+
+        <!-- ── Bulk import ─────────────────────────────────────────────── -->
+        <div id="bulkAddSection" class="admin-bulk-add hidden">
+          <h3 class="admin-bulk-add__title">Bulk Import from Riftcodex</h3>
+          <p class="admin-bulk-add__hint">One card code per line (e.g. <code>SFD-051</code>). Cards are looked up in Riftcodex and added automatically.</p>
+          <textarea id="bulkAddInput" class="admin-bulk-add__input" rows="6" placeholder="SFD-051&#10;VE-023&#10;TR-187"></textarea>
+          <div id="bulkAddStatus" class="admin-bulk-add__status hidden"></div>
+          <div class="admin-form__actions">
+            <button class="admin-btn admin-btn--primary" id="bulkAddImportBtn">Import Cards</button>
+            <button class="admin-btn admin-btn--ghost"   id="bulkAddCancelBtn">Cancel</button>
+          </div>
         </div>
 
         <!-- ── Add / Edit form ────────────────────────────────────────── -->
@@ -123,8 +138,8 @@ export class AdminPageComponent extends Component {
               <select id="fSet"></select>
             </div>
             <div class="form-group">
-              <label for="fMana">Energy Cost</label>
-              <input type="number" id="fMana" min="0" max="20" value="3">
+              <label for="fPrice">Price ($)</label>
+              <input type="number" id="fPrice" min="0" step="0.01" value="0.00">
             </div>
             <div class="form-group">
               <label for="fAttack">Power</label>
@@ -175,16 +190,27 @@ export class AdminPageComponent extends Component {
           </div>
         </div>
 
+        <!-- ── Bulk delete confirmation banner ──────────────────────── -->
+        <div id="bulkDeleteBanner" class="admin-bulk-banner hidden">
+          <span>Delete <strong id="bulkDeleteBannerCount">0</strong> selected card(s)? This cannot be undone.</span>
+          <span id="bulkDeleteError" class="admin-delete-error" style="display:none"></span>
+          <div class="admin-bulk-banner__actions">
+            <button class="admin-btn admin-btn--danger admin-btn--sm" id="bulkDeleteConfirmBtn">Yes, delete all</button>
+            <button class="admin-btn admin-btn--ghost  admin-btn--sm" id="bulkDeleteCancelBtn">Cancel</button>
+          </div>
+        </div>
+
         <!-- ── Cards table ────────────────────────────────────────────── -->
         <div class="admin-table-wrap">
           <table class="admin-table" id="adminTable">
             <thead>
               <tr>
-                <th>Name</th><th>Type</th><th>Rarity</th><th>Set</th><th>Tags</th><th>Art</th><th>Actions</th>
+                <th class="admin-table__check"><input type="checkbox" id="selectAll" title="Select all"></th>
+                <th>Name</th><th>Type</th><th>Rarity</th><th>Set</th><th>Tags</th><th>Price</th><th>Art</th><th>Actions</th>
               </tr>
             </thead>
             <tbody id="adminTableBody">
-              <tr><td colspan="7" class="admin-table__empty">Loading…</td></tr>
+              <tr><td colspan="9" class="admin-table__empty">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -219,6 +245,39 @@ export class AdminPageComponent extends Component {
     document.getElementById('riftcodexSearchBtn')?.addEventListener('click', () => this.#handleManualSearch());
     document.getElementById('riftcodexSearch')?.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key === 'Enter') this.#handleManualSearch();
+    });
+
+    // Bulk import / delete
+    document.getElementById('bulkAddBtn')?.addEventListener('click',        () => this.#toggleBulkAdd(true));
+    document.getElementById('bulkAddCancelBtn')?.addEventListener('click',  () => this.#toggleBulkAdd(false));
+    document.getElementById('bulkAddImportBtn')?.addEventListener('click',  () => void this.#handleBulkImport());
+    document.getElementById('bulkDeleteBtn')?.addEventListener('click',     () => this.#showBulkDeleteBanner());
+    document.getElementById('bulkDeleteConfirmBtn')?.addEventListener('click', () => void this.#executeBulkDelete());
+    document.getElementById('bulkDeleteCancelBtn')?.addEventListener('click',  () => this.#hideBulkDeleteBanner());
+
+    // Select-all checkbox
+    document.getElementById('selectAll')?.addEventListener('change', (e) => {
+      this.#selectAll((e.target as HTMLInputElement).checked);
+    });
+
+    // Table row actions (event delegation — persists across re-renders)
+    document.getElementById('adminTableBody')?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
+      if (!btn) return;
+      const id = btn.dataset.id!;
+      if (btn.dataset.action === 'edit')           this.#openForm(id);
+      if (btn.dataset.action === 'delete')         this.#promptDelete(id);
+      if (btn.dataset.action === 'confirm-delete') void this.#handleDelete(id);
+      if (btn.dataset.action === 'cancel-delete')  this.#cancelPromptDelete(id);
+    });
+
+    // Row checkboxes (event delegation)
+    document.getElementById('adminTableBody')?.addEventListener('change', (e) => {
+      const cb = e.target as HTMLInputElement;
+      if (!cb.classList.contains('row-select')) return;
+      if (cb.checked) this.#selectedIds.add(cb.dataset.id!);
+      else            this.#selectedIds.delete(cb.dataset.id!);
+      this.#updateBulkToolbar();
     });
 
     // Pre-fetch the Riftcodex card index in the background so lookups are instant when a card is uploaded
@@ -341,7 +400,7 @@ export class AdminPageComponent extends Component {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load cards';
       const tbody = document.getElementById('adminTableBody');
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="admin-table__empty admin-table__empty--error">${esc(msg)}</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="admin-table__empty admin-table__empty--error">${esc(msg)}</td></tr>`;
     }
   }
 
@@ -349,8 +408,12 @@ export class AdminPageComponent extends Component {
     const tbody = document.getElementById('adminTableBody');
     if (!tbody) return;
 
+    this.#selectedIds.clear();
+    this.#updateBulkToolbar();
+    this.#hideBulkDeleteBanner();
+
     if (this.#cards.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="admin-table__empty">No cards yet. Add one above.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="admin-table__empty">No cards yet. Add one above.</td></tr>`;
       return;
     }
 
@@ -358,28 +421,22 @@ export class AdminPageComponent extends Component {
       const tagNames = card.card_tags?.map(ct => esc(ct.tags.name)).join(', ') || '—';
       const rarityName = card.card_rarities?.name ?? '—';
       return `
-        <tr data-id="${card.id}">
+        <tr data-id="${esc(card.id)}">
+          <td class="admin-table__check"><input type="checkbox" class="row-select" data-id="${esc(card.id)}"></td>
           <td class="admin-table__name">${esc(card.name)}</td>
           <td><span class="admin-badge admin-badge--type">${esc(card.type)}</span></td>
           <td><span class="admin-badge admin-badge--${esc(rarityName.toLowerCase())}">${esc(rarityName)}</span></td>
           <td class="admin-table__set">${esc(card.card_sets?.name ?? '—')}</td>
           <td class="admin-table__tags">${tagNames}</td>
+          <td class="admin-table__price">$${Number(card.price).toFixed(2)}</td>
           <td>${card.art_url ? '<span class="admin-art-dot--yes">✓</span>' : '<span class="admin-art-dot--no">—</span>'}</td>
           <td class="admin-table__actions">
-            <button class="admin-btn admin-btn--sm" data-action="edit" data-id="${card.id}" aria-label="Edit ${esc(card.name)}">Edit</button>
-            <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${card.id}" aria-label="Delete ${esc(card.name)}">Delete</button>
+            <button class="admin-btn admin-btn--sm" data-action="edit" data-id="${esc(card.id)}" aria-label="Edit ${esc(card.name)}">Edit</button>
+            <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${esc(card.id)}" aria-label="Delete ${esc(card.name)}">Delete</button>
           </td>
         </tr>
       `;
     }).join('');
-
-    tbody.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-action]');
-      if (!btn) return;
-      const id = btn.dataset.id!;
-      if (btn.dataset.action === 'edit')   this.#openForm(id);
-      if (btn.dataset.action === 'delete') this.#handleDelete(id);
-    });
   }
 
   #openForm(id: string | null): void {
@@ -411,7 +468,7 @@ export class AdminPageComponent extends Component {
       (document.getElementById('fType')     as HTMLSelectElement).value   = card.type;
       (document.getElementById('fRarity')   as HTMLSelectElement).value   = String(card.rarity_id);
       (document.getElementById('fSet')      as HTMLSelectElement).value   = String(card.set_id);
-      (document.getElementById('fMana')     as HTMLInputElement).value    = String(card.mana_cost);
+      (document.getElementById('fPrice')    as HTMLInputElement).value    = card.price.toFixed(2);
       (document.getElementById('fAttack')   as HTMLInputElement).value    = String(card.attack);
       (document.getElementById('fDefense')  as HTMLInputElement).value    = String(card.defense);
       (document.getElementById('fDesc')     as HTMLTextAreaElement).value = card.description;
@@ -424,7 +481,7 @@ export class AdminPageComponent extends Component {
       (document.getElementById('fType')     as HTMLSelectElement).value   = 'Champion';
       (document.getElementById('fRarity')   as HTMLSelectElement).value   = String(this.#rarities[0]?.id ?? '');
       (document.getElementById('fSet')      as HTMLSelectElement).value   = String(this.#sets[0]?.id ?? '');
-      (document.getElementById('fMana')     as HTMLInputElement).value    = '3';
+      (document.getElementById('fPrice')    as HTMLInputElement).value    = '0.00';
       (document.getElementById('fAttack')   as HTMLInputElement).value    = '0';
       (document.getElementById('fDefense')  as HTMLInputElement).value    = '0';
       (document.getElementById('fDesc')     as HTMLTextAreaElement).value = '';
@@ -477,7 +534,7 @@ export class AdminPageComponent extends Component {
       type:        this.#el<HTMLSelectElement>('fType').value as CardType,
       rarity_id:   rarityId,
       set_id:      setId,
-      mana_cost:   Number(this.#el<HTMLInputElement>('fMana').value)    || 0,
+      price:       parseFloat(this.#el<HTMLInputElement>('fPrice').value) || 0,
       attack:      Number(this.#el<HTMLInputElement>('fAttack').value)  || 0,
       defense:     Number(this.#el<HTMLInputElement>('fDefense').value) || 0,
       description: this.#el<HTMLTextAreaElement>('fDesc').value.trim(),
@@ -527,11 +584,217 @@ export class AdminPageComponent extends Component {
   }
 
   async #handleDelete(id: string): Promise<void> {
-    const card = this.#cards.find(c => c.id === id);
-    if (!card || !confirm(`Delete "${card.name}"? This cannot be undone.`)) return;
     const { error } = await getSupabaseClient().from('cards').delete().eq('id', id);
-    if (error) { alert(error.message); return; }
+    if (error) {
+      const row = document.querySelector<HTMLElement>(`tr[data-id="${id}"]`);
+      const actionsCell = row?.querySelector<HTMLElement>('.admin-table__actions');
+      if (actionsCell) {
+        actionsCell.innerHTML = `
+          <span class="admin-delete-error">${esc(error.message)}</span>
+          <button class="admin-btn admin-btn--sm admin-btn--ghost" data-action="cancel-delete" data-id="${esc(id)}">OK</button>
+        `;
+      }
+      return;
+    }
     await this.#fetchCards();
+  }
+
+  // ── Inline delete confirmation ─────────────────────────────────────────────
+
+  #promptDelete(id: string): void {
+    const card = this.#cards.find(c => c.id === id);
+    if (!card) return;
+    const row = document.querySelector<HTMLElement>(`tr[data-id="${id}"]`);
+    const actionsCell = row?.querySelector<HTMLElement>('.admin-table__actions');
+    if (!actionsCell) return;
+    actionsCell.innerHTML = `
+      <span class="admin-delete-confirm__label">Delete "${esc(card.name)}"?</span>
+      <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="confirm-delete" data-id="${esc(id)}">Yes</button>
+      <button class="admin-btn admin-btn--sm admin-btn--ghost"  data-action="cancel-delete"  data-id="${esc(id)}">No</button>
+    `;
+  }
+
+  #cancelPromptDelete(id: string): void {
+    const card = this.#cards.find(c => c.id === id);
+    if (!card) return;
+    const row = document.querySelector<HTMLElement>(`tr[data-id="${id}"]`);
+    const actionsCell = row?.querySelector<HTMLElement>('.admin-table__actions');
+    if (!actionsCell) return;
+    actionsCell.innerHTML = `
+      <button class="admin-btn admin-btn--sm" data-action="edit" data-id="${esc(id)}" aria-label="Edit ${esc(card.name)}">Edit</button>
+      <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${esc(id)}" aria-label="Delete ${esc(card.name)}">Delete</button>
+    `;
+  }
+
+  // ── Bulk delete ────────────────────────────────────────────────────────────
+
+  #showBulkDeleteBanner(): void {
+    const banner   = document.getElementById('bulkDeleteBanner');
+    const countEl  = document.getElementById('bulkDeleteBannerCount');
+    if (!banner || !countEl) return;
+    countEl.textContent = String(this.#selectedIds.size);
+    banner.classList.remove('hidden');
+    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  #hideBulkDeleteBanner(): void {
+    document.getElementById('bulkDeleteBanner')?.classList.add('hidden');
+  }
+
+  async #executeBulkDelete(): Promise<void> {
+    const ids = [...this.#selectedIds];
+    if (ids.length === 0) return;
+
+    const confirmBtn = document.getElementById('bulkDeleteConfirmBtn') as HTMLButtonElement | null;
+    const cancelBtn  = document.getElementById('bulkDeleteCancelBtn')  as HTMLButtonElement | null;
+    const errorSpan  = document.getElementById('bulkDeleteError')      as HTMLElement | null;
+
+    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Deleting…'; }
+    if (cancelBtn)  cancelBtn.disabled = true;
+    if (errorSpan)  errorSpan.style.display = 'none';
+
+    const { error } = await getSupabaseClient().from('cards').delete().in('id', ids);
+
+    if (error) {
+      if (errorSpan) { errorSpan.textContent = error.message; errorSpan.style.display = ''; }
+      if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Yes, delete all'; }
+      if (cancelBtn)  cancelBtn.disabled = false;
+      return;
+    }
+
+    this.#selectedIds.clear();
+    this.#hideBulkDeleteBanner();
+    await this.#fetchCards();
+  }
+
+  // ── Bulk toolbar helpers ───────────────────────────────────────────────────
+
+  #updateBulkToolbar(): void {
+    const count    = this.#selectedIds.size;
+    const btn      = document.getElementById('bulkDeleteBtn');
+    const countEl  = document.getElementById('bulkDeleteCount');
+    const selectAll = document.getElementById('selectAll') as HTMLInputElement | null;
+    if (btn)    btn.classList.toggle('hidden', count === 0);
+    if (countEl) countEl.textContent = String(count);
+    if (selectAll) {
+      selectAll.checked       = count > 0 && count === this.#cards.length;
+      selectAll.indeterminate = count > 0 && count < this.#cards.length;
+    }
+  }
+
+  #selectAll(checked: boolean): void {
+    this.#selectedIds.clear();
+    if (checked) this.#cards.forEach(c => this.#selectedIds.add(c.id));
+    document.querySelectorAll<HTMLInputElement>('.row-select').forEach(cb => { cb.checked = checked; });
+    this.#updateBulkToolbar();
+  }
+
+  // ── Bulk import ────────────────────────────────────────────────────────────
+
+  #toggleBulkAdd(show: boolean): void {
+    const section = document.getElementById('bulkAddSection');
+    section?.classList.toggle('hidden', !show);
+    if (!show) {
+      (document.getElementById('bulkAddInput')    as HTMLTextAreaElement).value = '';
+      document.getElementById('bulkAddStatus')?.classList.add('hidden');
+      (document.getElementById('bulkAddImportBtn') as HTMLButtonElement).disabled = false;
+    }
+  }
+
+  async #handleBulkImport(): Promise<void> {
+    const textarea  = document.getElementById('bulkAddInput')    as HTMLTextAreaElement;
+    const statusEl  = document.getElementById('bulkAddStatus')!;
+    const importBtn = document.getElementById('bulkAddImportBtn') as HTMLButtonElement;
+
+    // Parse and validate all codes up-front so the progress counter is accurate
+    const rawLines = textarea.value.split('\n').map(l => l.trim().toUpperCase()).filter(Boolean);
+    if (rawLines.length === 0) return;
+
+    const parsedCodes: { setCode: string; collectorNum: string; raw: string }[] = [];
+    const invalidLines: string[] = [];
+    for (const line of rawLines) {
+      const m = line.match(/^([A-Z]{2,5})[^A-Z0-9]*(\d+)$/);
+      if (m) parsedCodes.push({ setCode: m[1], collectorNum: m[2], raw: line });
+      else   invalidLines.push(line);
+    }
+
+    importBtn.disabled = true;
+    statusEl.classList.remove('hidden');
+    statusEl.textContent = 'Building card index…';
+
+    try {
+      const { buildCardIndex, isIndexReady, lookupByCardCode } =
+        await import('../../services/RiftcodexService');
+
+      if (!isIndexReady()) {
+        await buildCardIndex();
+        // Verify the index actually loaded — a network failure leaves it empty
+        if (!isIndexReady()) {
+          statusEl.textContent = 'Failed to load Riftcodex card index. Check your connection and try again.';
+          return;
+        }
+      }
+
+      let added = 0;
+      const notFound: string[]  = [];
+      const dbErrors:  string[] = [];
+
+      for (let i = 0; i < parsedCodes.length; i++) {
+        const { setCode, collectorNum, raw } = parsedCodes[i];
+        statusEl.textContent = `Looking up ${i + 1} / ${parsedCodes.length}: ${raw}…`;
+
+        const match = lookupByCardCode(setCode, collectorNum);
+        if (!match) { notFound.push(raw); continue; }
+
+        const f = match.fields;
+
+        // Resolve rarity — exact name match, falls back to first rarity if unknown
+        const rarityId = this.#rarities.find(
+          r => r.name.toLowerCase() === f.rarityName?.toLowerCase(),
+        )?.id ?? this.#rarities[0]?.id;
+
+        // Resolve set — partial name match in either direction, falls back to first set
+        const setId = this.#sets.find(s => {
+          const sn = f.setName?.toLowerCase() ?? '';
+          return sn.length > 0 && (s.name.toLowerCase().includes(sn) || sn.includes(s.name.toLowerCase()));
+        })?.id ?? this.#sets[0]?.id;
+
+        if (!rarityId || !setId) {
+          dbErrors.push(`${raw} (could not resolve rarity/set)`);
+          continue;
+        }
+
+        const { error } = await getSupabaseClient().from('cards').insert([{
+          name:         f.name,
+          type:         (f.type ?? 'Spell') as CardType,
+          rarity_id:    rarityId,
+          set_id:       setId,
+          price:        0,
+          attack:       f.attack      ?? 0,
+          defense:      f.defense     ?? 0,
+          description:  f.description ?? '',
+          art_gradient: 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
+          art_url:      f.imageUrl    ?? null,
+        }]);
+
+        if (error) { dbErrors.push(`${raw} (${error.message})`); }
+        else        { added++; }
+      }
+
+      // Build summary
+      const lines: string[] = [`${added} of ${parsedCodes.length} cards added.`];
+      if (invalidLines.length) lines.push(`${invalidLines.length} skipped — bad format: ${invalidLines.join(', ')}`);
+      if (notFound.length)     lines.push(`${notFound.length} not in Riftcodex: ${notFound.join(', ')}`);
+      if (dbErrors.length)     lines.push(`${dbErrors.length} DB errors: ${dbErrors.join('; ')}`);
+      statusEl.textContent = lines.join(' | ');
+
+      if (added > 0) await this.#fetchCards();
+
+    } catch (err) {
+      statusEl.textContent = `Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`;
+    } finally {
+      importBtn.disabled = false;
+    }
   }
 
   async #handleImageUpload(file: File): Promise<void> {
@@ -720,7 +983,7 @@ export class AdminPageComponent extends Component {
     if (fields.name)        (document.getElementById('fName')    as HTMLInputElement).value    = fields.name;
     if (fields.type)        (document.getElementById('fType')    as HTMLSelectElement).value   = fields.type;
     if (fields.description) (document.getElementById('fDesc')    as HTMLTextAreaElement).value = fields.description;
-    if (fields.manaCost  != null) (document.getElementById('fMana')    as HTMLInputElement).value = String(fields.manaCost);
+    // Price is not sourced from Riftcodex — admin must set it manually
     if (fields.attack    != null) (document.getElementById('fAttack')  as HTMLInputElement).value = String(fields.attack);
     if (fields.defense   != null) (document.getElementById('fDefense') as HTMLInputElement).value = String(fields.defense);
 

@@ -107,7 +107,7 @@ export class CardsPageComponent extends Component {
             : `<div class="tcg-card__art-bg" style="background:${safeCss(card.artGradient)}"></div>`
           }
           <span class="tcg-card__rarity ${esc(card.rarityClass)}">${esc(card.rarity.name)}</span>
-          <span class="tcg-card__mana-cost">${card.manaCost}</span>
+          <span class="tcg-card__price-tag">$${card.price.toFixed(2)}</span>
         </div>
         <div class="tcg-card__info">
           <div class="tcg-card__name">${esc(card.name)}</div>
