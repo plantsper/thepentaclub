@@ -11,15 +11,12 @@
  */
 
 import { getSupabaseClient } from './supabaseClient';
+import { detectVariant } from '../utils/cardVariant';
 
 // ── Result types ──────────────────────────────────────────────────────────────
 
-// Variant detected from the card code:
-//   standard   — 170/221  (collector ≤ total)
-//   overnumber — 100/99   (collector > total, no suffix)
-//   alt-art    — 000a/100 (letter suffix)
-//   signature  — 200[*]/199 (asterisk suffix, overnumber signature card)
-export type CardVariant = 'standard' | 'overnumber' | 'alt-art' | 'signature' | 'unknown';
+export type { CardVariant } from '../utils/cardVariant';
+import type { CardVariant } from '../utils/cardVariant';
 
 export interface OcrCardResult {
   setCode?:      string;       // e.g. "SFD"
@@ -53,20 +50,6 @@ async function fileToBase64Jpeg(file: File, maxDim = 1024): Promise<string> {
 }
 
 // ── Card code parsing ─────────────────────────────────────────────────────────
-
-/**
- * Detect variant from a parsed collector number and optional total.
- *   signature  — collector ends with '*'
- *   alt-art    — collector ends with a letter (a–z)
- *   overnumber — collector (numeric part) > total
- *   standard   — everything else
- */
-function detectVariant(collectorNum: string, total: string | undefined): CardVariant {
-  if (collectorNum.endsWith('*')) return 'signature';
-  if (/[a-z]$/i.test(collectorNum)) return 'alt-art';
-  if (total && parseInt(collectorNum, 10) > parseInt(total, 10)) return 'overnumber';
-  return 'standard';
-}
 
 // Parse the card code from Claude's free-text response.
 // Handles: standard (170/221), overnumber (100/99), alt-art (000a/100), signature (200[*]/199)

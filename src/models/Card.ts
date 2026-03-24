@@ -1,4 +1,6 @@
 import type { ICard, IRarity, ICardSet, ITag, CardType } from '../types';
+import { variantFromCardCode } from '../utils/cardVariant';
+import type { CardVariant } from '../utils/cardVariant';
 
 export class Card implements ICard {
   constructor(
@@ -20,5 +22,9 @@ export class Card implements ICard {
 
   get rarityClass(): string {
     return `tcg-card__rarity--${this.rarity.name.toLowerCase()}`;
+  }
+
+  get variant(): CardVariant {
+    return variantFromCardCode(this.cardCode);
   }
 }

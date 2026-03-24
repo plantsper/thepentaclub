@@ -1,5 +1,7 @@
 export type CardType = 'Champion' | 'Spell' | 'Artifact';
 
+export type { CardVariant } from '../utils/cardVariant';
+
 export interface IRarity {
   id: number;
   name: string;
@@ -37,6 +39,7 @@ export interface ICard {
   /** Collector number / total with variant suffix, e.g. '170/221', '000a/100', '200[*]/199' */
   cardCode?: string;
   readonly rarityClass: string;
+  readonly variant: import('../utils/cardVariant').CardVariant;
 }
 
 export interface ICardCollection {

@@ -89,6 +89,26 @@
   color: var(--text-secondary);
 }
 
+.tcg-card__rarity--uncommon {
+  background: linear-gradient(135deg, #22d3ee, #0891b2);
+  color: #001a2e;
+}
+
+.tcg-card__rarity--showcase {
+  background: linear-gradient(135deg, #fb923c, #ea580c);
+  color: #1a0500;
+}
+
+.tcg-card__rarity--promo {
+  background: linear-gradient(135deg, #ec4899, #be185d);
+  color: #fff;
+}
+
+.tcg-card__rarity--ultimate {
+  background: linear-gradient(135deg, #ffd700, #ff8c00);
+  color: #1a0a00;
+}
+
 .tcg-card__info {
   padding: 14px 16px;
 }

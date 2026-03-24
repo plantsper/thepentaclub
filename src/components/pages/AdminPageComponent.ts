@@ -2,6 +2,7 @@ import { Component } from '../base/Component';
 import { getSupabaseClient } from '../../services/supabaseClient';
 import type { CardType } from '../../types';
 import { esc } from '../../utils/esc';
+import { variantFromCardCode, variantLabel } from '../../utils/cardVariant';
 
 // Minimal shape used by #applyRiftcodexFields — mirrors RiftcodexMatch['fields']
 interface RiftcodexFields {
@@ -459,7 +460,11 @@ export class AdminPageComponent extends Component {
         <tr data-id="${esc(card.id)}">
           <td class="admin-table__check"><input type="checkbox" class="row-select" data-id="${esc(card.id)}"></td>
           <td class="admin-table__name">${esc(card.name)}</td>
-          <td class="admin-table__code">${card.card_set_code && card.card_code ? `${esc(card.card_set_code)} ${esc(card.card_code)}` : '—'}</td>
+          <td class="admin-table__code">${(() => {
+            if (!card.card_set_code || !card.card_code) return '—';
+            const vLabel = variantLabel(variantFromCardCode(card.card_code));
+            return `${esc(card.card_set_code)} ${esc(card.card_code)}${vLabel ? ` <span class="admin-badge admin-badge--variant">${esc(vLabel)}</span>` : ''}`;
+          })()}</td>
           <td><span class="admin-badge admin-badge--type">${esc(card.type)}</span></td>
           <td><span class="admin-badge admin-badge--${esc(rarityName.toLowerCase())}">${esc(rarityName)}</span></td>
           <td class="admin-table__set">${esc(card.card_sets?.name ?? '—')}</td>
@@ -824,11 +829,13 @@ export class AdminPageComponent extends Component {
         let setCode: string | undefined;
         let collectorNum: string | undefined;
         let cardNumber: string | undefined;
+        let variant: string | undefined;
         try {
           const result = await extractCardCode(file);
           setCode      = result.setCode;
           collectorNum = result.collectorNum;
           cardNumber   = result.cardNumber;
+          variant      = result.variant;
         } catch {
           this.#setQueueItemStatus(i, 'error', 'Scan failed');
           continue;
@@ -840,16 +847,25 @@ export class AdminPageComponent extends Component {
         }
 
         // Step 2 — Riftcodex lookup
-        this.#setQueueItemStatus(i, 'looking-up', `Looking up ${setCode}-${collectorNum}…`);
-        const match = lookupByCardCode(setCode, collectorNum);
+        // Strip letter/asterisk variant suffix so alt-art ("201a") and signature ("200*")
+        // resolve to the base card in the Riftcodex index ("201", "200")
+        const lookupNum = collectorNum?.replace(/[a-z*]+$/i, '');
+        this.#setQueueItemStatus(i, 'looking-up', `Looking up ${setCode}-${lookupNum}…`);
+        const match = lookupByCardCode(setCode, lookupNum ?? '');
         if (!match) {
-          this.#setQueueItemStatus(i, 'not-found', `${setCode}-${collectorNum} not in Riftcodex`);
+          this.#setQueueItemStatus(i, 'not-found', `${setCode}-${lookupNum} not in Riftcodex`);
           continue;
         }
 
-        const f = match.fields;
-        const rarityId = this.#rarities.find(r => r.name.toLowerCase() === f.rarityName?.toLowerCase())?.id
-                      ?? this.#rarities[0]?.id;
+        // Override rarity for overnumbered/signature variants — Riftcodex returns the
+        // base card rarity, but the physical card's rarity is "Overnumbered"
+        const f = { ...match.fields };
+        if (variant === 'overnumber' || variant === 'signature') f.rarityName = 'Showcase';
+
+        const matchedRarity = this.#rarities.find(r => r.name.toLowerCase() === f.rarityName?.toLowerCase());
+        console.debug('[Bulk rarity]', { collectorNum, variant, rarityName: f.rarityName, matched: matchedRarity?.name });
+        if (!matchedRarity && f.rarityName) console.warn(`[Bulk import] Unknown rarity "${f.rarityName}" — defaulting to first`);
+        const rarityId = matchedRarity?.id ?? this.#rarities[0]?.id;
         const setId = this.#sets.find(s => {
           const sn = f.setName?.toLowerCase() ?? '';
           return sn.length > 0 && (s.name.toLowerCase().includes(sn) || sn.includes(s.name.toLowerCase()));
@@ -953,9 +969,9 @@ export class AdminPageComponent extends Component {
     try {
       // ── Step 1: Claude vision extracts the card code ───────────────────────
       const { extractCardCode } = await import('../../services/CardOcrService');
-      const { setCode, collectorNum, cardNumber, rawResponse } = await extractCardCode(file);
+      const { setCode, collectorNum, cardNumber, variant, rawResponse } = await extractCardCode(file);
 
-      console.debug('[CardScan] Claude raw:', rawResponse, '→', { setCode, collectorNum, cardNumber });
+      console.debug('[CardScan] Claude raw:', rawResponse, '→', { setCode, collectorNum, cardNumber, variant });
 
       // Pre-fill the card code input so the user can correct it if needed
       if (setCode && collectorNum) {
@@ -977,9 +993,15 @@ export class AdminPageComponent extends Component {
           await buildCardIndex();
         }
 
-        const match = lookupByCardCode(setCode, collectorNum);
+        // Strip variant suffix so alt-art/signature resolve to the base card in index
+        const lookupNum = collectorNum.replace(/[a-z*]+$/i, '');
+        const match = lookupByCardCode(setCode, lookupNum);
         if (match) {
-          this.#applyRiftcodexFields(match.fields);
+          // Override rarity for overnumbered/signature variants
+          const fields = { ...match.fields };
+          if (variant === 'overnumber' || variant === 'signature') fields.rarityName = 'Overnumbered';
+          console.debug('[CardScan rarity]', { collectorNum, variant, rarityName: fields.rarityName });
+          this.#applyRiftcodexFields(fields);
           statusEl.className = 'scan-status scan-status--success';
           statusEl.innerHTML =
             `<span class="scan-status__icon">✓</span>` +

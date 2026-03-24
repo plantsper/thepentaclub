@@ -1,6 +1,7 @@
 import { Component } from '../base/Component';
 import type { ICard, IEventEmitter } from '../../types';
 import { esc, safeUrl } from '../../utils/esc';
+import { variantLabel } from '../../utils/cardVariant';
 
 function safeHex(hex: string): string {
   return /^#[0-9a-fA-F]{3,8}$/.test(hex) ? hex : '#566380';
@@ -100,6 +101,7 @@ export class CardLightboxComponent extends Component {
       </div>
       <div class="lightbox__type-line">
         <span class="lightbox__type-badge">${esc(card.type)}</span>
+        ${variantLabel(card.variant) ? `<span class="lightbox__variant-badge">${esc(variantLabel(card.variant)!)}</span>` : ''}
       </div>
       <p class="lightbox__desc">${esc(card.description)}</p>
       <div class="lightbox__stats">

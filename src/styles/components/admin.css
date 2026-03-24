@@ -767,6 +767,12 @@
   border: 1px solid rgba(0, 196, 255, 0.2);
 }
 
+.admin-badge--variant {
+  background: rgba(251, 146, 60, 0.1);
+  color: #fb923c;
+  border: 1px solid rgba(251, 146, 60, 0.25);
+}
+
 .admin-badge--legendary {
   background: rgba(250, 204, 21, 0.1);
   color: #fbbf24;
