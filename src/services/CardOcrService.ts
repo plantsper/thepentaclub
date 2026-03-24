@@ -1,19 +1,16 @@
 /**
  * CardOcrService — Claude vision-based card code extraction.
  *
- * Sends the card image to claude-haiku as base64 and asks it to extract the
- * card code printed at the bottom of every Riftbound card (e.g. "SFD • 170/221").
- *
- * This replaces the previous Tesseract.js approach which was unreliable on
- * real-world photos with angle, holographic foil, and sleeve glare.
+ * Sends the card image to the `ocr-card` Supabase Edge Function, which calls
+ * Claude Haiku server-side. The Anthropic API key never touches the browser.
  *
  * ## Flow
  *   upload image → resize to ≤1024px (cost control) → base64
- *   → Claude: "extract the card code" → parse response
+ *   → POST /functions/v1/ocr-card → parse response
  *   → setCode + collectorNum → Riftcodex guaranteed lookup
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { getSupabaseClient } from './supabaseClient';
 
 // ── Result types ──────────────────────────────────────────────────────────────
 
@@ -29,7 +26,6 @@ export interface OcrCardResult {
 /**
  * Resize the image to fit within maxDim × maxDim, then return as a base64
  * JPEG string (no data-URL prefix). Keeps aspect ratio.
- * Smaller images = fewer tokens = faster + cheaper.
  */
 async function fileToBase64Jpeg(file: File, maxDim = 1024): Promise<string> {
   const bitmap = await createImageBitmap(file);
@@ -44,7 +40,6 @@ async function fileToBase64Jpeg(file: File, maxDim = 1024): Promise<string> {
   canvas.getContext('2d')!.drawImage(bitmap, 0, 0, w, h);
   bitmap.close();
 
-  // canvas.toDataURL returns "data:image/jpeg;base64,<data>" — strip prefix
   const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
   return dataUrl.split(',')[1];
 }
@@ -65,7 +60,6 @@ function parseCardCode(text: string): OcrCardResult {
       rawResponse:  text,
     };
   }
-  // bare NNN/TTT with no set code
   const bare = text.match(/(\d{1,3})[/](\d{1,3})/);
   if (bare) return { cardNumber: `${bare[1]}/${bare[2]}`, rawResponse: text };
 
@@ -76,47 +70,18 @@ function parseCardCode(text: string): OcrCardResult {
 
 /**
  * Extract the card code from a Riftbound card photo using Claude vision.
- * Returns setCode + collectorNum if found; rawResponse always set for debugging.
+ * Delegates to the `ocr-card` Edge Function — Anthropic key stays server-side.
  */
 export async function extractCardCode(file: File): Promise<OcrCardResult> {
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined;
-  if (!apiKey) throw new Error('VITE_ANTHROPIC_API_KEY is not set in .env.local');
-
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-
   const base64 = await fileToBase64Jpeg(file, 1024);
 
-  const response = await client.messages.create(
-    {
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 64,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type:   'image',
-              source: { type: 'base64', media_type: 'image/jpeg', data: base64 },
-            },
-            {
-              type: 'text',
-              text:
-                'This is a Riftbound trading card. Find the card code printed at the bottom — ' +
-                'it looks like "SFD • 170/221" (set code, bullet or dash, collector number / total). ' +
-                'Reply with ONLY the card code, nothing else. If you cannot find it, reply "not found".',
-            },
-          ],
-        },
-      ],
-    },
-    { signal: AbortSignal.timeout(20_000) },
-  );
+  const { data, error } = await getSupabaseClient().functions.invoke('ocr-card', {
+    body: { image: base64 },
+  });
 
-  const raw = response.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as { type: 'text'; text: string }).text)
-    .join(' ')
-    .trim();
+  if (error) throw new Error(`OCR request failed: ${error.message}`);
+
+  const raw: string = (data as { raw?: string }).raw ?? '';
 
   if (!raw || raw.toLowerCase() === 'not found') return { rawResponse: raw };
   return parseCardCode(raw);

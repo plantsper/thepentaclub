@@ -17,3 +17,12 @@ export function safeUrl(url: string): string {
     return '';
   }
 }
+
+/**
+ * Validate a CSS value (e.g. gradient, color) for use in style attributes.
+ * Allows only characters that appear in valid CSS gradient/background expressions.
+ * Returns empty string if the value contains anything outside the allowlist.
+ */
+export function safeCss(value: string): string {
+  return /^[\w\s#,()\-.%/]+$/.test(value) ? value : '';
+}

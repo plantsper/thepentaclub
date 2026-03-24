@@ -1,5 +1,6 @@
 import { Component } from '../base/Component';
 import type { ICard, ICardCollection, IEventEmitter } from '../../types';
+import { esc, safeUrl, safeCss } from '../../utils/esc';
 
 export class CardGridComponent extends Component {
   #collection: ICardCollection;
@@ -41,19 +42,22 @@ export class CardGridComponent extends Component {
   }
 
   #renderCards(cards: ICard[]): string {
-    return cards.map((card, i) => `
-      <div class="tcg-card stagger-in" style="transition-delay:${i * 0.06}s" data-card-id="${card.id}">
+    return cards.map((card, i) => {
+      const artSrc = safeUrl(card.artUrl ?? '');
+      const gradient = safeCss(card.artGradient);
+      return `
+      <div class="tcg-card stagger-in" style="transition-delay:${i * 0.06}s" data-card-id="${esc(card.id)}">
         <div class="tcg-card__art">
-          ${card.artUrl
-            ? `<img class="tcg-card__art-img" src="${card.artUrl}" alt="${card.name}" loading="lazy">`
-            : `<div class="tcg-card__art-bg" style="background:${card.artGradient}"></div>`
+          ${artSrc
+            ? `<img class="tcg-card__art-img" src="${artSrc}" alt="${esc(card.name)}" loading="lazy">`
+            : `<div class="tcg-card__art-bg" style="background:${gradient}"></div>`
           }
-          <span class="tcg-card__rarity ${card.rarityClass}">${card.rarity.name}</span>
-          <span class="tcg-card__mana-cost">${card.manaCost}</span>
+          <span class="tcg-card__rarity ${esc(card.rarityClass)}">${esc(card.rarity.name)}</span>
+          <span class="tcg-card__mana-cost">${Number(card.manaCost)}</span>
         </div>
         <div class="tcg-card__info">
-          <div class="tcg-card__name">${card.name}</div>
-          <div class="tcg-card__type">${card.type} &mdash; ${card.set.name}</div>
+          <div class="tcg-card__name">${esc(card.name)}</div>
+          <div class="tcg-card__type">${esc(card.type)} &mdash; ${esc(card.set.name)}</div>
           <div class="tcg-card__stats-row">
             <span class="tcg-card__stat tcg-card__stat--atk">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14.7 2.3a1 1 0 0 0-1.4 0l-4.6 4.6L6 4.2a1 1 0 0 0-1.4 0L2.3 6.5a1 1 0 0 0 0 1.4L5 10.6l-2.3 2.3a1 1 0 0 0 0 1.4l6 6a1 1 0 0 0 1.4 0l2.3-2.3 2.7 2.7a1 1 0 0 0 1.4 0l2.3-2.3a1 1 0 0 0 0-1.4L16.1 14.3l4.6-4.6a1 1 0 0 0 0-1.4l-6-6z"/></svg>
@@ -66,6 +70,7 @@ export class CardGridComponent extends Component {
           </div>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
   }
 }

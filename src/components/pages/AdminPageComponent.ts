@@ -341,7 +341,7 @@ export class AdminPageComponent extends Component {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load cards';
       const tbody = document.getElementById('adminTableBody');
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="admin-table__empty admin-table__empty--error">${msg}</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="admin-table__empty admin-table__empty--error">${esc(msg)}</td></tr>`;
     }
   }
 

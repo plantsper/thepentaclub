@@ -1,6 +1,6 @@
 import { Component } from '../base/Component';
 import type { ICard, ICardCollection, IEventEmitter } from '../../types';
-import { esc, safeUrl } from '../../utils/esc';
+import { esc, safeUrl, safeCss } from '../../utils/esc';
 
 export class CardsPageComponent extends Component {
   #collection: ICardCollection;
@@ -104,7 +104,7 @@ export class CardsPageComponent extends Component {
         <div class="tcg-card__art">
           ${artSrc
             ? `<img class="tcg-card__art-img" src="${artSrc}" alt="${esc(card.name)}" loading="lazy">`
-            : `<div class="tcg-card__art-bg" style="background:${card.artGradient}"></div>`
+            : `<div class="tcg-card__art-bg" style="background:${safeCss(card.artGradient)}"></div>`
           }
           <span class="tcg-card__rarity ${esc(card.rarityClass)}">${esc(card.rarity.name)}</span>
           <span class="tcg-card__mana-cost">${card.manaCost}</span>
