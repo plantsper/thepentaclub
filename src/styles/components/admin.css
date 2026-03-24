@@ -265,42 +265,138 @@
 .admin-bulk-add__hint {
   font-size: 13px;
   color: var(--text-muted);
-  margin: 0 0 14px;
+  margin: 0 0 16px;
 }
 
-.admin-bulk-add__hint code {
-  font-family: monospace;
+/* Drop zone */
+.admin-bulk-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
   background: var(--bg-elevated);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 16px;
+  text-align: center;
 }
 
-.admin-bulk-add__input {
+.admin-bulk-drop:hover,
+.admin-bulk-drop.dragging {
+  border-color: var(--accent);
+  background: rgba(0, 230, 138, 0.04);
+}
+
+.admin-bulk-drop input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
   width: 100%;
-  box-sizing: border-box;
+  height: 100%;
+  cursor: pointer;
+  /* hidden — click is forwarded programmatically */
+  pointer-events: none;
+}
+
+.admin-bulk-drop__label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.admin-bulk-drop__browse {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.admin-bulk-drop__hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* Queue */
+.admin-bulk-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.bulk-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.bulk-queue-item__thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--bg-card);
+}
+
+.bulk-queue-item__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bulk-queue-item__name {
   font-size: 13px;
-  font-family: monospace;
+  font-weight: 500;
   color: var(--text-primary);
-  outline: none;
-  resize: vertical;
-  transition: border-color 0.2s;
-  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.admin-bulk-add__input:focus {
-  border-color: var(--accent);
+.bulk-queue-item__status {
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.admin-bulk-add__status {
-  font-size: 13px;
+.bulk-queue-status--pending    { color: var(--text-muted); }
+.bulk-queue-status--scanning   { color: var(--accent-secondary); }
+.bulk-queue-status--looking-up { color: var(--accent-secondary); }
+.bulk-queue-status--added      { color: var(--accent); }
+.bulk-queue-status--not-found  { color: #fbbf24; }
+.bulk-queue-status--error      { color: #f87171; }
+
+.bulk-queue-item__remove {
+  background: none;
+  border: none;
   color: var(--text-muted);
-  padding: 8px 0;
-  min-height: 20px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: color 0.15s, background 0.15s;
+}
+
+.bulk-queue-item__remove:hover:not(:disabled) {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.bulk-queue-item__remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* Bulk delete confirmation banner */

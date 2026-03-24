@@ -47,6 +47,7 @@ export class AdminPageComponent extends Component {
   #editingId: string | null = null;
   #uploadingArt             = false;
   #selectedIds: Set<string> = new Set();
+  #bulkItems: { file: File; url: string }[] = [];
 
   // Typed getElementById that throws if the element is missing — safer than `!` casts.
   #el<T extends HTMLElement>(id: string): T {
@@ -100,12 +101,17 @@ export class AdminPageComponent extends Component {
 
         <!-- ── Bulk import ─────────────────────────────────────────────── -->
         <div id="bulkAddSection" class="admin-bulk-add hidden">
-          <h3 class="admin-bulk-add__title">Bulk Import from Riftcodex</h3>
-          <p class="admin-bulk-add__hint">One card code per line (e.g. <code>SFD-051</code>). Cards are looked up in Riftcodex and added automatically.</p>
-          <textarea id="bulkAddInput" class="admin-bulk-add__input" rows="6" placeholder="SFD-051&#10;VE-023&#10;TR-187"></textarea>
-          <div id="bulkAddStatus" class="admin-bulk-add__status hidden"></div>
+          <h3 class="admin-bulk-add__title">Bulk Import from Images</h3>
+          <p class="admin-bulk-add__hint">Drop card photos below. Each image is OCR'd, matched in Riftcodex, and added automatically.</p>
+          <div id="bulkDropZone" class="admin-bulk-drop">
+            <input type="file" id="bulkFileInput" accept="image/jpeg,image/png,image/webp" multiple>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span class="admin-bulk-drop__label">Drop images here or <span class="admin-bulk-drop__browse">browse</span></span>
+            <span class="admin-bulk-drop__hint">JPEG · PNG · WebP · max 5 MB each</span>
+          </div>
+          <div id="bulkQueue" class="admin-bulk-queue"></div>
           <div class="admin-form__actions">
-            <button class="admin-btn admin-btn--primary" id="bulkAddImportBtn">Import Cards</button>
+            <button class="admin-btn admin-btn--primary" id="bulkAddImportBtn" disabled>Import Cards</button>
             <button class="admin-btn admin-btn--ghost"   id="bulkAddCancelBtn">Cancel</button>
           </div>
         </div>
@@ -248,9 +254,28 @@ export class AdminPageComponent extends Component {
     });
 
     // Bulk import / delete
-    document.getElementById('bulkAddBtn')?.addEventListener('click',        () => this.#toggleBulkAdd(true));
-    document.getElementById('bulkAddCancelBtn')?.addEventListener('click',  () => this.#toggleBulkAdd(false));
-    document.getElementById('bulkAddImportBtn')?.addEventListener('click',  () => void this.#handleBulkImport());
+    document.getElementById('bulkAddBtn')?.addEventListener('click',       () => this.#toggleBulkAdd(true));
+    document.getElementById('bulkAddCancelBtn')?.addEventListener('click', () => this.#toggleBulkAdd(false));
+    document.getElementById('bulkAddImportBtn')?.addEventListener('click', () => void this.#handleBulkImport());
+
+    // Drop zone
+    const dropZone  = document.getElementById('bulkDropZone')!;
+    const fileInput = document.getElementById('bulkFileInput') as HTMLInputElement;
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files?.length) this.#addBulkFiles([...fileInput.files]);
+      fileInput.value = '';
+    });
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragging'); });
+    dropZone.addEventListener('dragleave', (e) => {
+      if (!dropZone.contains(e.relatedTarget as Node)) dropZone.classList.remove('dragging');
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragging');
+      const files = [...((e as DragEvent).dataTransfer?.files ?? [])];
+      this.#addBulkFiles(files);
+    });
     document.getElementById('bulkDeleteBtn')?.addEventListener('click',     () => this.#showBulkDeleteBanner());
     document.getElementById('bulkDeleteConfirmBtn')?.addEventListener('click', () => void this.#executeBulkDelete());
     document.getElementById('bulkDeleteCancelBtn')?.addEventListener('click',  () => this.#hideBulkDeleteBanner());
@@ -692,78 +717,131 @@ export class AdminPageComponent extends Component {
   // ── Bulk import ────────────────────────────────────────────────────────────
 
   #toggleBulkAdd(show: boolean): void {
-    const section = document.getElementById('bulkAddSection');
-    section?.classList.toggle('hidden', !show);
+    document.getElementById('bulkAddSection')?.classList.toggle('hidden', !show);
     if (!show) {
-      (document.getElementById('bulkAddInput')    as HTMLTextAreaElement).value = '';
-      document.getElementById('bulkAddStatus')?.classList.add('hidden');
-      (document.getElementById('bulkAddImportBtn') as HTMLButtonElement).disabled = false;
+      // Revoke all object URLs to free memory
+      this.#bulkItems.forEach(item => URL.revokeObjectURL(item.url));
+      this.#bulkItems = [];
+      const queue = document.getElementById('bulkQueue');
+      if (queue) queue.innerHTML = '';
+      (document.getElementById('bulkAddImportBtn') as HTMLButtonElement).disabled = true;
     }
   }
 
+  #addBulkFiles(files: File[]): void {
+    const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    const valid = files.filter(f => ALLOWED.has(f.type) && f.size <= 5 * 1024 * 1024);
+    if (!valid.length) return;
+    valid.forEach(file => this.#bulkItems.push({ file, url: URL.createObjectURL(file) }));
+    this.#renderBulkQueue();
+    (document.getElementById('bulkAddImportBtn') as HTMLButtonElement).disabled = false;
+  }
+
+  #renderBulkQueue(): void {
+    const queue = document.getElementById('bulkQueue');
+    if (!queue) return;
+
+    if (!this.#bulkItems.length) { queue.innerHTML = ''; return; }
+
+    queue.innerHTML = this.#bulkItems.map((item, i) => `
+      <div class="bulk-queue-item" data-bulk-index="${i}">
+        <img class="bulk-queue-item__thumb" src="${item.url}" alt="${esc(item.file.name)}">
+        <div class="bulk-queue-item__info">
+          <span class="bulk-queue-item__name">${esc(item.file.name.length > 28 ? item.file.name.slice(0, 25) + '…' : item.file.name)}</span>
+          <span class="bulk-queue-item__status bulk-queue-status--pending">Pending</span>
+        </div>
+        <button class="bulk-queue-item__remove" data-bulk-remove="${i}" title="Remove">×</button>
+      </div>
+    `).join('');
+
+    queue.querySelectorAll<HTMLElement>('[data-bulk-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.bulkRemove);
+        URL.revokeObjectURL(this.#bulkItems[idx].url);
+        this.#bulkItems.splice(idx, 1);
+        this.#renderBulkQueue();
+        (document.getElementById('bulkAddImportBtn') as HTMLButtonElement).disabled = !this.#bulkItems.length;
+      });
+    });
+  }
+
+  #setQueueItemStatus(index: number, state: 'scanning' | 'looking-up' | 'added' | 'not-found' | 'error', text: string): void {
+    const span = document.querySelector<HTMLElement>(`[data-bulk-index="${index}"] .bulk-queue-item__status`);
+    if (!span) return;
+    span.className = `bulk-queue-item__status bulk-queue-status--${state}`;
+    span.textContent = text;
+  }
+
   async #handleBulkImport(): Promise<void> {
-    const textarea  = document.getElementById('bulkAddInput')    as HTMLTextAreaElement;
-    const statusEl  = document.getElementById('bulkAddStatus')!;
+    if (!this.#bulkItems.length) return;
+
     const importBtn = document.getElementById('bulkAddImportBtn') as HTMLButtonElement;
-
-    // Parse and validate all codes up-front so the progress counter is accurate
-    const rawLines = textarea.value.split('\n').map(l => l.trim().toUpperCase()).filter(Boolean);
-    if (rawLines.length === 0) return;
-
-    const parsedCodes: { setCode: string; collectorNum: string; raw: string }[] = [];
-    const invalidLines: string[] = [];
-    for (const line of rawLines) {
-      const m = line.match(/^([A-Z]{2,5})[^A-Z0-9]*(\d+)$/);
-      if (m) parsedCodes.push({ setCode: m[1], collectorNum: m[2], raw: line });
-      else   invalidLines.push(line);
-    }
-
+    const cancelBtn = document.getElementById('bulkAddCancelBtn') as HTMLButtonElement;
     importBtn.disabled = true;
-    statusEl.classList.remove('hidden');
-    statusEl.textContent = 'Building card index…';
+    cancelBtn.disabled = true;
+
+    // Disable remove buttons while processing
+    document.querySelectorAll<HTMLButtonElement>('.bulk-queue-item__remove').forEach(b => { b.disabled = true; });
 
     try {
       const { buildCardIndex, isIndexReady, lookupByCardCode } =
         await import('../../services/RiftcodexService');
+      const { extractCardCode } = await import('../../services/CardOcrService');
 
       if (!isIndexReady()) {
         await buildCardIndex();
-        // Verify the index actually loaded — a network failure leaves it empty
         if (!isIndexReady()) {
-          statusEl.textContent = 'Failed to load Riftcodex card index. Check your connection and try again.';
+          // Mark all pending as error
+          this.#bulkItems.forEach((_, i) => this.#setQueueItemStatus(i, 'error', 'Index load failed'));
           return;
         }
       }
 
       let added = 0;
-      const notFound: string[]  = [];
-      const dbErrors:  string[] = [];
 
-      for (let i = 0; i < parsedCodes.length; i++) {
-        const { setCode, collectorNum, raw } = parsedCodes[i];
-        statusEl.textContent = `Looking up ${i + 1} / ${parsedCodes.length}: ${raw}…`;
+      for (let i = 0; i < this.#bulkItems.length; i++) {
+        const { file } = this.#bulkItems[i];
 
+        // Step 1 — OCR
+        this.#setQueueItemStatus(i, 'scanning', 'Scanning…');
+        let setCode: string | undefined;
+        let collectorNum: string | undefined;
+        try {
+          const result = await extractCardCode(file);
+          setCode     = result.setCode;
+          collectorNum = result.collectorNum;
+        } catch {
+          this.#setQueueItemStatus(i, 'error', 'Scan failed');
+          continue;
+        }
+
+        if (!setCode || !collectorNum) {
+          this.#setQueueItemStatus(i, 'not-found', 'Code not read');
+          continue;
+        }
+
+        // Step 2 — Riftcodex lookup
+        this.#setQueueItemStatus(i, 'looking-up', `Looking up ${setCode}-${collectorNum}…`);
         const match = lookupByCardCode(setCode, collectorNum);
-        if (!match) { notFound.push(raw); continue; }
+        if (!match) {
+          this.#setQueueItemStatus(i, 'not-found', `${setCode}-${collectorNum} not in Riftcodex`);
+          continue;
+        }
 
         const f = match.fields;
-
-        // Resolve rarity — exact name match, falls back to first rarity if unknown
-        const rarityId = this.#rarities.find(
-          r => r.name.toLowerCase() === f.rarityName?.toLowerCase(),
-        )?.id ?? this.#rarities[0]?.id;
-
-        // Resolve set — partial name match in either direction, falls back to first set
+        const rarityId = this.#rarities.find(r => r.name.toLowerCase() === f.rarityName?.toLowerCase())?.id
+                      ?? this.#rarities[0]?.id;
         const setId = this.#sets.find(s => {
           const sn = f.setName?.toLowerCase() ?? '';
           return sn.length > 0 && (s.name.toLowerCase().includes(sn) || sn.includes(s.name.toLowerCase()));
         })?.id ?? this.#sets[0]?.id;
 
         if (!rarityId || !setId) {
-          dbErrors.push(`${raw} (could not resolve rarity/set)`);
+          this.#setQueueItemStatus(i, 'error', 'Could not resolve rarity/set');
           continue;
         }
 
+        // Step 3 — DB insert
         const { error } = await getSupabaseClient().from('cards').insert([{
           name:         f.name,
           type:         (f.type ?? 'Spell') as CardType,
@@ -777,23 +855,25 @@ export class AdminPageComponent extends Component {
           art_url:      f.imageUrl    ?? null,
         }]);
 
-        if (error) { dbErrors.push(`${raw} (${error.message})`); }
-        else        { added++; }
+        if (error) {
+          this.#setQueueItemStatus(i, 'error', error.message);
+        } else {
+          this.#setQueueItemStatus(i, 'added', `Added: ${esc(f.name)}`);
+          added++;
+        }
       }
-
-      // Build summary
-      const lines: string[] = [`${added} of ${parsedCodes.length} cards added.`];
-      if (invalidLines.length) lines.push(`${invalidLines.length} skipped — bad format: ${invalidLines.join(', ')}`);
-      if (notFound.length)     lines.push(`${notFound.length} not in Riftcodex: ${notFound.join(', ')}`);
-      if (dbErrors.length)     lines.push(`${dbErrors.length} DB errors: ${dbErrors.join('; ')}`);
-      statusEl.textContent = lines.join(' | ');
 
       if (added > 0) await this.#fetchCards();
 
     } catch (err) {
-      statusEl.textContent = `Import failed: ${err instanceof Error ? err.message : 'Unknown error'}`;
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      this.#bulkItems.forEach((_, i) => {
+        const span = document.querySelector(`[data-bulk-index="${i}"] .bulk-queue-item__status`);
+        if (span?.textContent === 'Pending') this.#setQueueItemStatus(i, 'error', msg);
+      });
     } finally {
       importBtn.disabled = false;
+      cancelBtn.disabled = false;
     }
   }
 
