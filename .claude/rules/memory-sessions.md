@@ -4,6 +4,21 @@ Rolling summary — most recent first. Keep last 5 sessions; archive older ones.
 
 ---
 
+## 2026-03-24 (latest)
+
+**Design system migration (Russo One + Chakra Petch)**
+- Google Fonts link updated: `Outfit`/`Crimson Pro` → `Russo One` (headings) + `Chakra Petch` (body)
+- `--font-display`, `--font-body`, `--font-accent` vars updated in `_variables.css` and `index.html` inline `:root`
+- `font-family: var(--font-display)` applied explicitly to: `.hero__title`, `.nav__logo-text`, `.section__title`, `.feature-card__title`, `.stat__value`, `.lightbox__name`, `.cta-section__title`, `.admin-title`, `.admin-form__title`
+- Russo One is single-weight — all heading elements changed to `font-weight: 400` to prevent faux-bold synthesis
+- Letter-spacing updated from negative values (`-0.03em`) to positive (`0.02em`/`0.04em`) — Russo One has wide natural spacing
+- Card depth enhanced: `.tcg-card` gets resting 2-layer shadow; hover shadow is 4-layer with accent ring
+- `.feature-card:hover`: 3-layer shadow + faint accent ring
+- `.lightbox__dialog` and `.auth-card`: deeper layered shadows
+- `.lightbox__desc`: removed `font-style: italic` + Crimson Pro; now `Chakra Petch` weight 300
+
+---
+
 ## 2026-03-24 (current)
 
 **Card code metadata + variant recognition**

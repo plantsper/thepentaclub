@@ -22,7 +22,8 @@
 
 .stat__value {
   font-size: clamp(1.5rem, 3vw, 2.25rem);
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-weight: 400;
   background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
   background-clip: text;
   -webkit-background-clip: text;

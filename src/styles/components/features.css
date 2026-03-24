@@ -32,7 +32,10 @@
   background: var(--bg-card);
   border-color: var(--border-light);
   transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(0, 230, 138, 0.06);
 }
 
 .feature-card:hover::before {
@@ -67,7 +70,9 @@
 
 .feature-card__title {
   font-size: 18px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
   margin-bottom: 10px;
 }
 

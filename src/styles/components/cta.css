@@ -38,7 +38,9 @@
 
 .cta-section__title {
   font-size: clamp(1.5rem, 3vw, 2.25rem);
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
   margin-bottom: 14px;
 }
 

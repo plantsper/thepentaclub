@@ -17,7 +17,9 @@
 
 .admin-title {
   font-size: 28px;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
   color: var(--text-primary);
   margin: 0 0 4px;
 }
@@ -459,7 +461,9 @@
 
 .admin-form__title {
   font-size: 18px;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
   color: var(--text-primary);
   margin: 0 0 20px;
 }
