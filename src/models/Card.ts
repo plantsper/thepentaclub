@@ -13,7 +13,9 @@ export class Card implements ICard {
     public readonly artGradient: string,
     public readonly set: ICardSet,
     public readonly tags: ITag[],
-    public readonly artUrl?: string
+    public readonly artUrl?: string,
+    public readonly cardSetCode?: string,
+    public readonly cardCode?: string
   ) {}
 
   get rarityClass(): string {

@@ -34,6 +34,8 @@ interface AdminCard {
   description: string;
   art_gradient: string;
   art_url: string | null;
+  card_set_code: string | null;
+  card_code: string | null;
   card_rarities: { id: number; name: string };
   card_sets: { id: number; name: string };
   card_tags: { tags: TagOption }[];
@@ -144,6 +146,14 @@ export class AdminPageComponent extends Component {
               <select id="fSet"></select>
             </div>
             <div class="form-group">
+              <label for="fCardSetCode">Set Code</label>
+              <input type="text" id="fCardSetCode" placeholder="e.g. SFD" maxlength="6" style="text-transform:uppercase">
+            </div>
+            <div class="form-group">
+              <label for="fCardCode">Card Code</label>
+              <input type="text" id="fCardCode" placeholder="e.g. 170/221 or 000a/100">
+            </div>
+            <div class="form-group">
               <label for="fPrice">Price ($)</label>
               <input type="number" id="fPrice" min="0" step="0.01" value="0.00">
             </div>
@@ -212,11 +222,11 @@ export class AdminPageComponent extends Component {
             <thead>
               <tr>
                 <th class="admin-table__check"><input type="checkbox" id="selectAll" title="Select all"></th>
-                <th>Name</th><th>Type</th><th>Rarity</th><th>Set</th><th>Tags</th><th>Price</th><th>Art</th><th>Actions</th>
+                <th>Name</th><th>Code</th><th>Type</th><th>Rarity</th><th>Set</th><th>Tags</th><th>Price</th><th>Art</th><th>Actions</th>
               </tr>
             </thead>
             <tbody id="adminTableBody">
-              <tr><td colspan="9" class="admin-table__empty">Loading…</td></tr>
+              <tr><td colspan="10" class="admin-table__empty">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -425,7 +435,7 @@ export class AdminPageComponent extends Component {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load cards';
       const tbody = document.getElementById('adminTableBody');
-      if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="admin-table__empty admin-table__empty--error">${esc(msg)}</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="10" class="admin-table__empty admin-table__empty--error">${esc(msg)}</td></tr>`;
     }
   }
 
@@ -438,7 +448,7 @@ export class AdminPageComponent extends Component {
     this.#hideBulkDeleteBanner();
 
     if (this.#cards.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" class="admin-table__empty">No cards yet. Add one above.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10" class="admin-table__empty">No cards yet. Add one above.</td></tr>`;
       return;
     }
 
@@ -449,6 +459,7 @@ export class AdminPageComponent extends Component {
         <tr data-id="${esc(card.id)}">
           <td class="admin-table__check"><input type="checkbox" class="row-select" data-id="${esc(card.id)}"></td>
           <td class="admin-table__name">${esc(card.name)}</td>
+          <td class="admin-table__code">${card.card_set_code && card.card_code ? `${esc(card.card_set_code)} ${esc(card.card_code)}` : '—'}</td>
           <td><span class="admin-badge admin-badge--type">${esc(card.type)}</span></td>
           <td><span class="admin-badge admin-badge--${esc(rarityName.toLowerCase())}">${esc(rarityName)}</span></td>
           <td class="admin-table__set">${esc(card.card_sets?.name ?? '—')}</td>
@@ -493,6 +504,8 @@ export class AdminPageComponent extends Component {
       (document.getElementById('fType')     as HTMLSelectElement).value   = card.type;
       (document.getElementById('fRarity')   as HTMLSelectElement).value   = String(card.rarity_id);
       (document.getElementById('fSet')      as HTMLSelectElement).value   = String(card.set_id);
+      (document.getElementById('fCardSetCode') as HTMLInputElement).value  = card.card_set_code ?? '';
+      (document.getElementById('fCardCode')    as HTMLInputElement).value  = card.card_code ?? '';
       (document.getElementById('fPrice')    as HTMLInputElement).value    = card.price.toFixed(2);
       (document.getElementById('fAttack')   as HTMLInputElement).value    = String(card.attack);
       (document.getElementById('fDefense')  as HTMLInputElement).value    = String(card.defense);
@@ -506,6 +519,8 @@ export class AdminPageComponent extends Component {
       (document.getElementById('fType')     as HTMLSelectElement).value   = 'Champion';
       (document.getElementById('fRarity')   as HTMLSelectElement).value   = String(this.#rarities[0]?.id ?? '');
       (document.getElementById('fSet')      as HTMLSelectElement).value   = String(this.#sets[0]?.id ?? '');
+      (document.getElementById('fCardSetCode') as HTMLInputElement).value  = '';
+      (document.getElementById('fCardCode')    as HTMLInputElement).value  = '';
       (document.getElementById('fPrice')    as HTMLInputElement).value    = '0.00';
       (document.getElementById('fAttack')   as HTMLInputElement).value    = '0';
       (document.getElementById('fDefense')  as HTMLInputElement).value    = '0';
@@ -556,10 +571,12 @@ export class AdminPageComponent extends Component {
 
     const payload = {
       name,
-      type:        this.#el<HTMLSelectElement>('fType').value as CardType,
-      rarity_id:   rarityId,
-      set_id:      setId,
-      price:       parseFloat(this.#el<HTMLInputElement>('fPrice').value) || 0,
+      type:          this.#el<HTMLSelectElement>('fType').value as CardType,
+      rarity_id:     rarityId,
+      set_id:        setId,
+      card_set_code: this.#el<HTMLInputElement>('fCardSetCode').value.trim().toUpperCase() || null,
+      card_code:     this.#el<HTMLInputElement>('fCardCode').value.trim() || null,
+      price:         parseFloat(this.#el<HTMLInputElement>('fPrice').value) || 0,
       attack:      Number(this.#el<HTMLInputElement>('fAttack').value)  || 0,
       defense:     Number(this.#el<HTMLInputElement>('fDefense').value) || 0,
       description: this.#el<HTMLTextAreaElement>('fDesc').value.trim(),
@@ -806,10 +823,12 @@ export class AdminPageComponent extends Component {
         this.#setQueueItemStatus(i, 'scanning', 'Scanning…');
         let setCode: string | undefined;
         let collectorNum: string | undefined;
+        let cardNumber: string | undefined;
         try {
           const result = await extractCardCode(file);
-          setCode     = result.setCode;
+          setCode      = result.setCode;
           collectorNum = result.collectorNum;
+          cardNumber   = result.cardNumber;
         } catch {
           this.#setQueueItemStatus(i, 'error', 'Scan failed');
           continue;
@@ -843,16 +862,18 @@ export class AdminPageComponent extends Component {
 
         // Step 3 — DB insert
         const { error } = await getSupabaseClient().from('cards').insert([{
-          name:         f.name,
-          type:         (f.type ?? 'Spell') as CardType,
-          rarity_id:    rarityId,
-          set_id:       setId,
-          price:        0,
-          attack:       f.attack      ?? 0,
-          defense:      f.defense     ?? 0,
-          description:  f.description ?? '',
-          art_gradient: 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
-          art_url:      f.imageUrl    ?? null,
+          name:          f.name,
+          type:          (f.type ?? 'Spell') as CardType,
+          rarity_id:     rarityId,
+          set_id:        setId,
+          card_set_code: setCode,
+          card_code:     cardNumber ?? collectorNum,
+          price:         0,
+          attack:        f.attack      ?? 0,
+          defense:       f.defense     ?? 0,
+          description:   f.description ?? '',
+          art_gradient:  'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
+          art_url:       f.imageUrl    ?? null,
         }]);
 
         if (error) {
@@ -940,6 +961,11 @@ export class AdminPageComponent extends Component {
       if (setCode && collectorNum) {
         const codeInput = document.getElementById('cardCodeInput') as HTMLInputElement | null;
         if (codeInput && !codeInput.value) codeInput.value = `${setCode}-${collectorNum}`;
+        // Also pre-fill the stored card code fields
+        const fCardSetCode = document.getElementById('fCardSetCode') as HTMLInputElement | null;
+        if (fCardSetCode) fCardSetCode.value = setCode;
+        const fCardCode = document.getElementById('fCardCode') as HTMLInputElement | null;
+        if (fCardCode) fCardCode.value = cardNumber ?? collectorNum;
       }
 
       const { lookupByCardCode, buildCardIndex, isIndexReady } = await import('../../services/RiftcodexService');

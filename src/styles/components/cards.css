@@ -86,10 +86,30 @@
   padding: 14px 16px;
 }
 
+.tcg-card__name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
 .tcg-card__name {
   font-size: 15px;
   font-weight: 700;
-  margin-bottom: 4px;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tcg-card__code {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  opacity: 0.7;
 }
 
 .tcg-card__type {

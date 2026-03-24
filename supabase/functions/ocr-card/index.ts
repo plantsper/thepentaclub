@@ -13,7 +13,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 // Lock CORS to your app's origin.
 // Set ALLOWED_ORIGIN secret: supabase secrets set ALLOWED_ORIGIN=https://yourdomain.com
 // Falls back to * only when unset (local dev).
-const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*';
+const ALLOWED_ORIGIN = (Deno.env.get('ALLOWED_ORIGIN') ?? '*').replace(/\/$/, '');
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
@@ -93,6 +93,9 @@ serve(async (req) => {
                 text:
                   'This is a Riftbound trading card. Find the card code printed at the bottom — ' +
                   'it looks like "SFD • 170/221" (set code, bullet or dash, collector number / total). ' +
+                  'Variants: alt-art cards use a letter suffix like "SFD • 000a/100"; ' +
+                  'signature overnumber cards use an asterisk suffix like "SFD • 200*/199". ' +
+                  'Preserve any letter or asterisk suffix exactly as printed. ' +
                   'Reply with ONLY the card code, nothing else. If you cannot find it, reply "not found".',
               },
             ],

@@ -716,6 +716,14 @@
   color: var(--text-muted) !important;
 }
 
+.admin-table__code {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .admin-table__price {
   font-size: 13px;
   font-weight: 600;

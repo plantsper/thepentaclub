@@ -56,7 +56,10 @@ export class CardGridComponent extends Component {
           <span class="tcg-card__price-tag">$${card.price.toFixed(2)}</span>
         </div>
         <div class="tcg-card__info">
-          <div class="tcg-card__name">${esc(card.name)}</div>
+          <div class="tcg-card__name-row">
+            <div class="tcg-card__name">${esc(card.name)}</div>
+            ${card.cardSetCode ? `<span class="tcg-card__code">${esc(card.cardSetCode)}${card.cardCode ? ` ${esc(card.cardCode)}` : ''}</span>` : ''}
+          </div>
           <div class="tcg-card__type">${esc(card.type)} &mdash; ${esc(card.set.name)}</div>
           <div class="tcg-card__stats-row">
             <span class="tcg-card__stat tcg-card__stat--atk">

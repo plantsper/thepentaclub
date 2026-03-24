@@ -1,6 +1,6 @@
 # Infrastructure: The Pentaclub
 
-*Last updated: 2026-03-24. Current state: TypeScript SPA, Supabase backend, Claude vision OCR via Edge Function.*
+*Last updated: 2026-03-24. Current state: TypeScript SPA, Supabase backend, Claude vision OCR via Edge Function. Price field replaces mana cost. Admin has bulk-delete and image-drop bulk import. Card code metadata (set abbreviation + collector number with variant suffix) stored per card and shown beside card name in all views.*
 
 ---
 
@@ -110,18 +110,24 @@ Migration files live in `supabase/migrations/`. Run them in order in the Supabas
 
 ```sql
 cards (
-  id           UUID        PK default gen_random_uuid()
-  name         TEXT        NOT NULL
-  type         TEXT        NOT NULL  -- 'Champion' | 'Spell' | 'Artifact'
-  mana_cost    INTEGER     NOT NULL DEFAULT 0
-  attack       INTEGER     NOT NULL DEFAULT 0
-  defense      INTEGER     NOT NULL DEFAULT 0
-  description  TEXT        NOT NULL DEFAULT ''
-  art_gradient TEXT        NOT NULL DEFAULT ''  -- CSS gradient fallback
-  art_url      TEXT                             -- Supabase Storage URL (nullable)
-  rarity_id    INTEGER     FK → card_rarities(id) NOT NULL
-  set_id       INTEGER     FK → card_sets(id)     NOT NULL
-  created_at   TIMESTAMPTZ DEFAULT NOW()
+  id            UUID          PK default gen_random_uuid()
+  name          TEXT          NOT NULL
+  type          TEXT          NOT NULL  -- 'Champion' | 'Spell' | 'Artifact'
+  price         NUMERIC(10,2) NOT NULL DEFAULT 0.00  -- sale price in dollars
+  attack        INTEGER       NOT NULL DEFAULT 0
+  defense       INTEGER       NOT NULL DEFAULT 0
+  description   TEXT          NOT NULL DEFAULT ''
+  art_gradient  TEXT          NOT NULL DEFAULT ''  -- CSS gradient fallback
+  art_url       TEXT                               -- Supabase Storage URL (nullable)
+  rarity_id     INTEGER       FK → card_rarities(id) NOT NULL
+  set_id        INTEGER       FK → card_sets(id)     NOT NULL
+  card_set_code TEXT                               -- Riftbound set abbreviation e.g. 'SFD', 'OGN' (nullable)
+  card_code     TEXT                               -- Collector number / total with variant suffix (nullable)
+                                                   --   standard:   '170/221'
+                                                   --   overnumber: '100/99'
+                                                   --   alt-art:    '000a/100'
+                                                   --   signature:  '200[*]/199'
+  created_at    TIMESTAMPTZ   DEFAULT NOW()
 )
 
 card_rarities (
@@ -218,9 +224,40 @@ Upload at 2x — the browser scales down with `object-fit: cover; object-positio
 
 ---
 
+## Admin CMS (`AdminPageComponent`)
+
+All card management lives in `src/components/pages/AdminPageComponent.ts`. Requires an authenticated session.
+
+### Card table
+
+Displays all cards with columns: Name, Code, Type, Rarity, Set, Tags, Price, Art, Actions.
+
+- **Inline delete confirmation** — clicking Delete replaces the row's action cell with "Delete [name]? Yes / No". No browser `confirm()` dialog.
+- **Bulk delete** — checkbox column (with select-all) lets the admin select multiple rows. A "Delete selected (N)" danger button appears in the toolbar. Clicking it shows a banner above the table; a second click on "Yes, delete all" fires a single `.delete().in('id', ids)` query. The banner has a dedicated error span so `innerHTML +=` is never used (which would destroy event listeners).
+- **Code column** — shows `SFD 170/221` (set code + collector number); muted style; empty rows show `—`.
+- **Price column** — shows `$X.XX` in the accent green; matches the card badge style.
+
+### Single-card form
+
+Opens above the table for both add and edit. Fields: Name, Type, Rarity, Set, Set Code, Card Code, Price ($), Power, Health, Art Gradient, Description, Tags (checkboxes), Card Art (file + URL).
+
+- **Set Code** — `text` input, e.g. `SFD`; auto-uppercased; auto-populated by OCR scan and bulk import. Stored as `card_set_code`.
+- **Card Code** — `text` input, e.g. `170/221` or `000a/100`; auto-populated by OCR scan and bulk import. Stored as `card_code`.
+- **Price** — `type="number" step="0.01"` — stored as `NUMERIC(10,2)`. Riftcodex does not provide pricing; defaults to `$0.00` on all auto-filled cards.
+
+### Bulk image import
+
+Drop zone in the admin toolbar area. Flow: drop images → thumbnails appear in a queue → click "Import Cards" → each image OCR'd + Riftcodex-looked-up + inserted sequentially. See **OCR Pipeline → Bulk image import** below.
+
+---
+
 ## OCR Pipeline (Card Scan)
 
-Admin can photograph a physical card and have fields auto-populated. The pipeline runs when a file is selected in the admin form.
+The same OCR pipeline powers two admin flows: single-card scan and bulk image import.
+
+### Single card scan
+
+Admin selects one image in the add/edit form. Upload and scan run in parallel.
 
 ```
 1. Browser (AdminPageComponent)
@@ -236,19 +273,47 @@ Admin can photograph a physical card and have fields auto-populated. The pipelin
    ├── POST https://api.anthropic.com/v1/messages
    │     model: claude-haiku-4-5-20251001
    │     max_tokens: 64
-   │     Prompt: "extract the card code — reply with ONLY the card code"
-   └── Returns { raw: "SFD • 170/221" }
+   │     Prompt: instructs model to preserve letter/asterisk suffix on collector number
+   └── Returns { raw: "SFD • 170/221" }  (or "SFD • 000a/100" / "SFD • 200[*]/199")
 
-4. parseCardCode(raw) → { setCode: "SFD", collectorNum: "170" }
+4. parseCardCode(raw) → { setCode, collectorNum, cardNumber, variant }
+   Variant detection (CardOcrService.ts):
+     - suffix '*'    → 'signature'
+     - suffix [a-z]  → 'alt-art'
+     - num > total   → 'overnumber'
+     - otherwise     → 'standard'
 
-5. RiftcodexService.lookupByCardCode("SFD", "170")
+5. RiftcodexService.lookupByCardCode(setCode, collectorNum)
    ├── buildCardIndex() if not ready — fetches all ~939 cards from api.riftcodex.com
    └── O(1) Map lookup → RiftcodexCard
 
 6. #applyRiftcodexFields() — populates admin form fields
+   fCardSetCode ← setCode  |  fCardCode ← cardNumber
 ```
 
 **Fallback chain:** If OCR fails → user enters card code manually → "Look up" button triggers step 5 directly. If Riftcodex lookup misses → user fills fields manually.
+
+### Bulk image import
+
+Admin drops multiple card photos onto the drop zone. Each image goes through the same OCR pipeline sequentially with per-image status feedback.
+
+```
+1. AdminPageComponent — #addBulkFiles()
+   └── Files validated (MIME + 5 MB cap), object URLs created for thumbnails
+
+2. Per image — #handleBulkImport() loop:
+   ├── CardOcrService.extractCardCode(file) → { setCode, collectorNum, cardNumber, variant }
+   ├── RiftcodexService.lookupByCardCode(setCode, collectorNum) → match
+   └── supabase.from('cards').insert([...])  — card_set_code + card_code stored; price defaults to 0.00
+
+3. Status per item updates live in the queue UI:
+   Pending → Scanning… → Looking up SFD-170… → Added: [name] | not-found | error
+```
+
+**Notes:**
+- Riftcodex has no pricing data — `price` is always set to `0.00` on import; admin must update it manually
+- Object URLs are revoked on panel close to prevent memory leaks
+- Processing is sequential to avoid overwhelming the OCR edge function
 
 ### Secrets
 
@@ -410,6 +475,8 @@ supabase/
     002_seed_cards.sql
     003_add_art_url.sql
     004_relational_schema.sql     — normalised rarities, sets, tags, RLS
+    005_mana_cost_to_price.sql    — renames mana_cost → price, widens to NUMERIC(10,2), resets all rows to 0.00
+    006_add_card_code.sql         — adds card_set_code TEXT and card_code TEXT (nullable) to cards
   functions/
     ocr-card/
       index.ts                    — Deno edge function, calls Anthropic API

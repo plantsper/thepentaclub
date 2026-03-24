@@ -14,11 +14,19 @@ import { getSupabaseClient } from './supabaseClient';
 
 // ── Result types ──────────────────────────────────────────────────────────────
 
+// Variant detected from the card code:
+//   standard   — 170/221  (collector ≤ total)
+//   overnumber — 100/99   (collector > total, no suffix)
+//   alt-art    — 000a/100 (letter suffix)
+//   signature  — 200[*]/199 (asterisk suffix, overnumber signature card)
+export type CardVariant = 'standard' | 'overnumber' | 'alt-art' | 'signature' | 'unknown';
+
 export interface OcrCardResult {
-  setCode?:      string;  // e.g. "SFD"
-  collectorNum?: string;  // e.g. "170"
-  cardNumber?:   string;  // e.g. "170/221"
-  rawResponse?:  string;  // full Claude response for debugging
+  setCode?:      string;       // e.g. "SFD"
+  collectorNum?: string;       // e.g. "170", "000a", "200*"
+  cardNumber?:   string;       // e.g. "170/221", "000a/100", "200*/199"
+  variant?:      CardVariant;
+  rawResponse?:  string;       // full Claude response for debugging
 }
 
 // ── Image helpers ─────────────────────────────────────────────────────────────
@@ -47,21 +55,44 @@ async function fileToBase64Jpeg(file: File, maxDim = 1024): Promise<string> {
 // ── Card code parsing ─────────────────────────────────────────────────────────
 
 /**
- * Parse the card code from Claude's free-text response.
- * Handles: "SFD • 170/221", "SFD-170/221", "SFD 170/221", "SFD·170"
+ * Detect variant from a parsed collector number and optional total.
+ *   signature  — collector ends with '*'
+ *   alt-art    — collector ends with a letter (a–z)
+ *   overnumber — collector (numeric part) > total
+ *   standard   — everything else
  */
+function detectVariant(collectorNum: string, total: string | undefined): CardVariant {
+  if (collectorNum.endsWith('*')) return 'signature';
+  if (/[a-z]$/i.test(collectorNum)) return 'alt-art';
+  if (total && parseInt(collectorNum, 10) > parseInt(total, 10)) return 'overnumber';
+  return 'standard';
+}
+
+// Parse the card code from Claude's free-text response.
+// Handles: standard (170/221), overnumber (100/99), alt-art (000a/100), signature (200[*]/199)
 function parseCardCode(text: string): OcrCardResult {
-  const m = text.match(/([A-Z]{2,5})\s*[•·\-–\s]\s*(\d+)(?:[/](\d+))?/i);
+  // collectorNum captures digits + optional letter or asterisk suffix
+  const m = text.match(/([A-Z]{2,5})\s*[•·\-–\s]\s*(\d+[a-z*]?)(?:[/](\d+))?/i);
   if (m) {
+    const collectorNum = m[2];
+    const total        = m[3];
     return {
       setCode:      m[1].toUpperCase(),
-      collectorNum: m[2],
-      cardNumber:   m[3] ? `${m[2]}/${m[3]}` : m[2],
+      collectorNum,
+      cardNumber:   total ? `${collectorNum}/${total}` : collectorNum,
+      variant:      detectVariant(collectorNum, total),
       rawResponse:  text,
     };
   }
-  const bare = text.match(/(\d{1,3})[/](\d{1,3})/);
-  if (bare) return { cardNumber: `${bare[1]}/${bare[2]}`, rawResponse: text };
+  // Bare number/total with no set code — try to detect variant at least
+  const bare = text.match(/(\d+[a-z*]?)[/](\d+)/i);
+  if (bare) {
+    return {
+      cardNumber:  `${bare[1]}/${bare[2]}`,
+      variant:     detectVariant(bare[1], bare[2]),
+      rawResponse: text,
+    };
+  }
 
   return { rawResponse: text };
 }

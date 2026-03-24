@@ -92,7 +92,10 @@ export class CardLightboxComponent extends Component {
 
     body.innerHTML = `
       <div class="lightbox__set">${esc(card.set.name)}</div>
-      <h2 class="lightbox__name">${esc(card.name)}</h2>
+      <div class="lightbox__name-row">
+        <h2 class="lightbox__name">${esc(card.name)}</h2>
+        ${card.cardSetCode ? `<span class="lightbox__card-code">${esc(card.cardSetCode)}${card.cardCode ? ` ${esc(card.cardCode)}` : ''}</span>` : ''}
+      </div>
       <div class="lightbox__type-line">
         <span class="lightbox__type-badge">${esc(card.type)}</span>
       </div>

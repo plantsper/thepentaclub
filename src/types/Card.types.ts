@@ -32,6 +32,10 @@ export interface ICard {
   artUrl?: string;
   set: ICardSet;
   tags: ITag[];
+  /** Riftbound set abbreviation, e.g. 'SFD', 'OGN' */
+  cardSetCode?: string;
+  /** Collector number / total with variant suffix, e.g. '170/221', '000a/100', '200[*]/199' */
+  cardCode?: string;
   readonly rarityClass: string;
 }
 
