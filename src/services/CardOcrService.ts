@@ -86,28 +86,31 @@ export async function extractCardCode(file: File): Promise<OcrCardResult> {
 
   const base64 = await fileToBase64Jpeg(file, 1024);
 
-  const response = await client.messages.create({
-    model:      'claude-haiku-4-5-20251001',
-    max_tokens: 64,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type:   'image',
-            source: { type: 'base64', media_type: 'image/jpeg', data: base64 },
-          },
-          {
-            type: 'text',
-            text:
-              'This is a Riftbound trading card. Find the card code printed at the bottom — ' +
-              'it looks like "SFD • 170/221" (set code, bullet or dash, collector number / total). ' +
-              'Reply with ONLY the card code, nothing else. If you cannot find it, reply "not found".',
-          },
-        ],
-      },
-    ],
-  });
+  const response = await client.messages.create(
+    {
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 64,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type:   'image',
+              source: { type: 'base64', media_type: 'image/jpeg', data: base64 },
+            },
+            {
+              type: 'text',
+              text:
+                'This is a Riftbound trading card. Find the card code printed at the bottom — ' +
+                'it looks like "SFD • 170/221" (set code, bullet or dash, collector number / total). ' +
+                'Reply with ONLY the card code, nothing else. If you cannot find it, reply "not found".',
+            },
+          ],
+        },
+      ],
+    },
+    { signal: AbortSignal.timeout(20_000) },
+  );
 
   const raw = response.content
     .filter(b => b.type === 'text')

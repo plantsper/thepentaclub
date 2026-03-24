@@ -39,9 +39,20 @@ export class NavComponent extends Component {
 
   afterMount(): void {
     const toggle = document.getElementById('mobileToggle');
-    toggle?.addEventListener('click', () => {
+    toggle?.addEventListener('click', (e) => {
       this.#mobileOpen = !this.#mobileOpen;
+      (e.currentTarget as HTMLElement).classList.toggle('open', this.#mobileOpen);
       document.getElementById('navLinks')?.classList.toggle('open', this.#mobileOpen);
+    });
+
+    // Close mobile menu when any nav link is tapped
+    document.querySelectorAll<HTMLElement>('#navLinks .nav__link').forEach(link => {
+      link.addEventListener('click', () => {
+        if (!this.#mobileOpen) return;
+        this.#mobileOpen = false;
+        toggle?.classList.remove('open');
+        document.getElementById('navLinks')?.classList.remove('open');
+      });
     });
 
     window.addEventListener('scroll', () => {

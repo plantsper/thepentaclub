@@ -1,6 +1,7 @@
 import { Component } from '../base/Component';
 import { getSupabaseClient } from '../../services/supabaseClient';
 import type { CardType } from '../../types';
+import { esc } from '../../utils/esc';
 
 // Minimal shape used by #applyRiftcodexFields — mirrors RiftcodexMatch['fields']
 interface RiftcodexFields {
@@ -45,6 +46,13 @@ export class AdminPageComponent extends Component {
   #allTags: TagOption[]     = [];
   #editingId: string | null = null;
   #uploadingArt             = false;
+
+  // Typed getElementById that throws if the element is missing — safer than `!` casts.
+  #el<T extends HTMLElement>(id: string): T {
+    const el = document.getElementById(id) as T | null;
+    if (!el) throw new Error(`[AdminPage] #${id} not found in DOM`);
+    return el;
+  }
 
   render(): string {
     return `
@@ -280,8 +288,8 @@ export class AdminPageComponent extends Component {
     }
     el.innerHTML = this.#allTags.map(t => `
       <span class="admin-lookup-chip">
-        ${t.name}
-        <button class="admin-lookup-chip__del" data-tag-id="${t.id}" title="Delete">×</button>
+        ${esc(t.name)}
+        <button class="admin-lookup-chip__del" data-tag-id="${t.id}" aria-label="Delete tag ${esc(t.name)}" title="Delete">×</button>
       </span>
     `).join('');
 
@@ -304,8 +312,8 @@ export class AdminPageComponent extends Component {
     }
     el.innerHTML = this.#sets.map(s => `
       <span class="admin-lookup-chip">
-        ${s.name}
-        <button class="admin-lookup-chip__del" data-set-id="${s.id}" title="Delete">×</button>
+        ${esc(s.name)}
+        <button class="admin-lookup-chip__del" data-set-id="${s.id}" aria-label="Delete set ${esc(s.name)}" title="Delete">×</button>
       </span>
     `).join('');
 
@@ -347,18 +355,19 @@ export class AdminPageComponent extends Component {
     }
 
     tbody.innerHTML = this.#cards.map(card => {
-      const tagNames = card.card_tags?.map(ct => ct.tags.name).join(', ') || '—';
+      const tagNames = card.card_tags?.map(ct => esc(ct.tags.name)).join(', ') || '—';
+      const rarityName = card.card_rarities?.name ?? '—';
       return `
         <tr data-id="${card.id}">
-          <td class="admin-table__name">${card.name}</td>
-          <td><span class="admin-badge admin-badge--type">${card.type}</span></td>
-          <td><span class="admin-badge admin-badge--${card.card_rarities?.name?.toLowerCase()}">${card.card_rarities?.name ?? '—'}</span></td>
-          <td class="admin-table__set">${card.card_sets?.name ?? '—'}</td>
+          <td class="admin-table__name">${esc(card.name)}</td>
+          <td><span class="admin-badge admin-badge--type">${esc(card.type)}</span></td>
+          <td><span class="admin-badge admin-badge--${esc(rarityName.toLowerCase())}">${esc(rarityName)}</span></td>
+          <td class="admin-table__set">${esc(card.card_sets?.name ?? '—')}</td>
           <td class="admin-table__tags">${tagNames}</td>
           <td>${card.art_url ? '<span class="admin-art-dot--yes">✓</span>' : '<span class="admin-art-dot--no">—</span>'}</td>
           <td class="admin-table__actions">
-            <button class="admin-btn admin-btn--sm" data-action="edit"   data-id="${card.id}">Edit</button>
-            <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${card.id}">Delete</button>
+            <button class="admin-btn admin-btn--sm" data-action="edit" data-id="${card.id}" aria-label="Edit ${esc(card.name)}">Edit</button>
+            <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${card.id}" aria-label="Delete ${esc(card.name)}">Delete</button>
           </td>
         </tr>
       `;
@@ -435,32 +444,46 @@ export class AdminPageComponent extends Component {
   }
 
   async #handleSave(): Promise<void> {
-    const errorEl   = document.getElementById('formError')!;
-    const successEl = document.getElementById('formSuccess')!;
-    const saveBtn   = document.getElementById('saveCardBtn') as HTMLButtonElement;
+    const errorEl   = this.#el('formError');
+    const successEl = this.#el('formSuccess');
+    const saveBtn   = this.#el<HTMLButtonElement>('saveCardBtn');
 
     errorEl.classList.add('hidden');
     successEl.classList.add('hidden');
 
-    const name = (document.getElementById('fName') as HTMLInputElement).value.trim();
+    const name = this.#el<HTMLInputElement>('fName').value.trim();
     if (!name) {
       errorEl.textContent = 'Name is required.';
       errorEl.classList.remove('hidden');
       return;
     }
 
+    const rarityId = Number(this.#el<HTMLSelectElement>('fRarity').value);
+    if (!rarityId) {
+      errorEl.textContent = 'Please select a rarity.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
+    const setId = Number(this.#el<HTMLSelectElement>('fSet').value);
+    if (!setId) {
+      errorEl.textContent = 'Please select a set.';
+      errorEl.classList.remove('hidden');
+      return;
+    }
+
     const payload = {
       name,
-      type:       (document.getElementById('fType')     as HTMLSelectElement).value as CardType,
-      rarity_id:  Number((document.getElementById('fRarity')  as HTMLSelectElement).value),
-      set_id:     Number((document.getElementById('fSet')     as HTMLSelectElement).value),
-      mana_cost:  Number((document.getElementById('fMana')    as HTMLInputElement).value)   || 0,
-      attack:     Number((document.getElementById('fAttack')  as HTMLInputElement).value)   || 0,
-      defense:    Number((document.getElementById('fDefense') as HTMLInputElement).value)   || 0,
-      description:(document.getElementById('fDesc')     as HTMLTextAreaElement).value.trim(),
-      art_gradient:(document.getElementById('fGradient') as HTMLInputElement).value.trim()
-                  || 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
-      art_url:    (document.getElementById('fArtUrl')   as HTMLInputElement).value.trim() || null,
+      type:        this.#el<HTMLSelectElement>('fType').value as CardType,
+      rarity_id:   rarityId,
+      set_id:      setId,
+      mana_cost:   Number(this.#el<HTMLInputElement>('fMana').value)    || 0,
+      attack:      Number(this.#el<HTMLInputElement>('fAttack').value)  || 0,
+      defense:     Number(this.#el<HTMLInputElement>('fDefense').value) || 0,
+      description: this.#el<HTMLTextAreaElement>('fDesc').value.trim(),
+      art_gradient: this.#el<HTMLInputElement>('fGradient').value.trim()
+                   || 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
+      art_url:     this.#el<HTMLInputElement>('fArtUrl').value.trim() || null,
     };
 
     const selectedTagIds = Array.from(
@@ -580,7 +603,7 @@ export class AdminPageComponent extends Component {
           statusEl.className = 'scan-status scan-status--success';
           statusEl.innerHTML =
             `<span class="scan-status__icon">✓</span>` +
-            `<span>Found: <strong>${match.fields.name}</strong> · ${setCode} ${collectorNum}</span>` +
+            `<span>Found: <strong>${esc(match.fields.name)}</strong> · ${esc(setCode)} ${esc(collectorNum)}</span>` +
             `<span class="scan-status__badge">card code</span>`;
           return;
         }
@@ -640,7 +663,7 @@ export class AdminPageComponent extends Component {
         statusEl.className = 'scan-status scan-status--success';
         statusEl.innerHTML =
           `<span class="scan-status__icon">✓</span>` +
-          `<span>Found: <strong>${match.fields.name}</strong> · ${setCode} ${collectorNum}</span>` +
+          `<span>Found: <strong>${esc(match.fields.name)}</strong> · ${esc(setCode)} ${esc(collectorNum)}</span>` +
           `<span class="scan-status__badge">card code</span>`;
       } else {
         statusEl.className = 'scan-status scan-status--error';
@@ -670,7 +693,7 @@ export class AdminPageComponent extends Component {
         statusEl.className = 'scan-status scan-status--success';
         statusEl.innerHTML =
           `<span class="scan-status__icon">✓</span>` +
-          `<span>Found: <strong>${match.fields.name}</strong></span>` +
+          `<span>Found: <strong>${esc(match.fields.name)}</strong></span>` +
           `<span class="scan-status__badge">manual search</span>`;
       } else {
         statusEl.className = 'scan-status scan-status--error';

@@ -1,3 +1,5 @@
+// Fallback data used when Supabase is unreachable (e.g. env vars not set).
+// Must stay in sync with ICard / Card constructor if either changes.
 import { Card } from '../models/Card';
 import type { ICard, IRarity, ICardSet } from '../types';
 

@@ -196,3 +196,14 @@
   color: var(--text-muted);
   font-size: 16px;
 }
+
+@media (max-width: 480px) {
+  .cards-toolbar__search {
+    min-width: 0; /* allow it to shrink below 200px on phones */
+  }
+
+  .filter-btn {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+}

@@ -17,13 +17,11 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "^25.5.0",
     "typescript": "^6.0.2",
     "vite": "^8.0.2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
-    "@supabase/supabase-js": "^2.100.0",
-    "tesseract.js": "^7.0.0"
+    "@supabase/supabase-js": "^2.100.0"
   }
 }

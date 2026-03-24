@@ -12,7 +12,7 @@ export async function signOut(): Promise<void> {
 }
 
 export async function sendPasswordReset(email: string): Promise<void> {
-  const redirectTo = window.location.origin + window.location.pathname;
+  const redirectTo = window.location.origin + '/#/reset-password';
   const { error } = await getSupabaseClient().auth.resetPasswordForEmail(email, { redirectTo });
   if (error) throw error;
 }
