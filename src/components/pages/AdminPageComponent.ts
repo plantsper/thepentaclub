@@ -16,14 +16,6 @@ interface RiftcodexFields {
   tags:         string[];
 }
 
-interface OcrFields {
-  name?:        string;
-  type?:        CardType;
-  description?: string;
-  manaCost?:    number;
-  attack?:      number;
-  defense?:     number;
-}
 
 interface RarityOption  { id: number; name: string; sort_order: number }
 interface SetOption     { id: number; name: string; slug: string; description: string }
@@ -561,63 +553,57 @@ export class AdminPageComponent extends Component {
     statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Reading card…';
 
     try {
-      const { extractCardName } = await import('../../services/CardOcrService');
-      const { name: ocrName, bannerName, setCode, collectorNum, cardNumber } = await extractCardName(file);
+      // ── Step 1: Claude vision extracts the card code ───────────────────────
+      const { extractCardCode } = await import('../../services/CardOcrService');
+      const { setCode, collectorNum, cardNumber, rawResponse } = await extractCardCode(file);
 
-      const { lookupByCardCode, fuzzySearchCard, isIndexReady } = await import('../../services/RiftcodexService');
+      console.debug('[CardScan] Claude raw:', rawResponse, '→', { setCode, collectorNum, cardNumber });
 
-      // ── Priority 1: exact card-code lookup (guaranteed match) ─────────────
-      let match = null;
-      let method = '';
-
-      if (setCode && collectorNum && isIndexReady()) {
-        match = lookupByCardCode(setCode, collectorNum);
-        if (match) method = 'card-code';
-      }
-
-      // ── Priority 2: also pre-fill the card code input for the user ────────
+      // Pre-fill the card code input so the user can correct it if needed
       if (setCode && collectorNum) {
         const codeInput = document.getElementById('cardCodeInput') as HTMLInputElement | null;
         if (codeInput && !codeInput.value) codeInput.value = `${setCode}-${collectorNum}`;
       }
 
-      // ── Priority 3: fuzzy name search (fallback) ──────────────────────────
-      if (!match && ocrName) {
-        match = await fuzzySearchCard(ocrName, setCode);
-        if (match) method = 'name';
-      }
-      if (!match && bannerName) {
-        match = await fuzzySearchCard(bannerName, setCode);
-        if (match) method = 'banner';
+      const { lookupByCardCode, buildCardIndex, isIndexReady } = await import('../../services/RiftcodexService');
+
+      // ── Step 2: Guaranteed card-code lookup from pre-fetched index ─────────
+      if (setCode && collectorNum) {
+        if (!isIndexReady()) {
+          statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Fetching card index…';
+          await buildCardIndex();
+        }
+
+        const match = lookupByCardCode(setCode, collectorNum);
+        if (match) {
+          this.#applyRiftcodexFields(match.fields);
+          statusEl.className = 'scan-status scan-status--success';
+          statusEl.innerHTML =
+            `<span class="scan-status__icon">✓</span>` +
+            `<span>Found: <strong>${match.fields.name}</strong> · ${setCode} ${collectorNum}</span>` +
+            `<span class="scan-status__badge">card code</span>`;
+          return;
+        }
       }
 
-      if (match) {
-        this.#applyRiftcodexFields(match.fields);
-        const numInfo  = cardNumber ? ` · ${cardNumber}` : '';
-        const byCode   = method === 'card-code';
-        const validated = byCode || match.fields.setValidated;
-        const setLabel = setCode ? ` · ${setCode} ${validated ? '✓' : '⚠ unverified'}` : '';
-        const methodLabel = byCode ? 'card code' : method === 'banner' ? 'banner name' : 'name';
-        statusEl.className = `scan-status scan-status--${validated ? 'success' : 'warning'}`;
-        statusEl.innerHTML =
-          `<span class="scan-status__icon">${validated ? '✓' : '◈'}</span>` +
-          `<span>Found: <strong>${match.fields.name}</strong>${setLabel}${numInfo}</span>` +
-          `<span class="scan-status__badge">via ${methodLabel}</span>`;
-      } else {
-        // All lookups failed — fall back to raw OCR fields
-        const { extractAllFields } = await import('../../services/CardOcrService');
-        const ocr = await extractAllFields(file);
-        this.#applyOcrFields(ocr);
-        const tried = [ocrName, bannerName].filter(Boolean).map(n => `"${n}"`).join(', ');
+      // ── Step 3: Card code not found in index ───────────────────────────────
+      if (setCode || cardNumber) {
         statusEl.className = 'scan-status scan-status--warning';
         statusEl.innerHTML =
           `<span class="scan-status__icon">◈</span>` +
-          `<span>No match for ${tried || 'unknown'} — partial OCR fill. ` +
-          `Enter the card code above for a guaranteed lookup.</span>`;
+          `<span>Read code <strong>${cardNumber ?? `${setCode}-${collectorNum}`}</strong> but not found in Riftcodex. ` +
+          `Verify the code above and hit "Look up".</span>`;
+      } else {
+        statusEl.className = 'scan-status scan-status--warning';
+        statusEl.innerHTML =
+          `<span class="scan-status__icon">◈</span>` +
+          `<span>Could not read card code — enter it manually above (e.g. SFD-170).</span>`;
       }
     } catch (err) {
       statusEl.className = 'scan-status scan-status--error';
-      statusEl.textContent = 'Scan failed — enter the card code (e.g. SFD-051) above for a guaranteed lookup.';
+      statusEl.innerHTML =
+        `<span class="scan-status__icon">✕</span>` +
+        `<span>Scan failed — enter the card code above (e.g. SFD-170).</span>`;
       console.error('[CardScan]', err);
     }
   }
@@ -736,16 +722,7 @@ export class AdminPageComponent extends Component {
     }
   }
 
-  #applyOcrFields(ocr: OcrFields): void {
-    if (ocr.name)        (document.getElementById('fName')    as HTMLInputElement).value    = ocr.name;
-    if (ocr.type)        (document.getElementById('fType')    as HTMLSelectElement).value   = ocr.type;
-    if (ocr.description) (document.getElementById('fDesc')    as HTMLTextAreaElement).value = ocr.description;
-    if (ocr.manaCost  != null) (document.getElementById('fMana')    as HTMLInputElement).value = String(ocr.manaCost);
-    if (ocr.attack    != null) (document.getElementById('fAttack')  as HTMLInputElement).value = String(ocr.attack);
-    if (ocr.defense   != null) (document.getElementById('fDefense') as HTMLInputElement).value = String(ocr.defense);
-  }
-
-  #updateArtPreview(url: string): void {
+#updateArtPreview(url: string): void {
     const wrap = document.getElementById('artPreviewWrap')!;
     const img  = document.getElementById('artPreview') as HTMLImageElement;
     if (url) { img.src = url; wrap.classList.remove('hidden'); }
