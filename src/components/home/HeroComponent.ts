@@ -2,13 +2,15 @@ import { Component } from '../base/Component';
 
 export class HeroComponent extends Component {
   render(): string {
+    const particleColors = ['#00e68a', '#00e68a', '#00c4ff', '#00e68a', '#00c4ff', '#a855f7'];
     const particles = Array.from({ length: 20 }, () => {
       const size = 2 + Math.random() * 3;
       const left = Math.random() * 100;
       const dur = 6 + Math.random() * 10;
       const delay = Math.random() * 8;
       const opacity = 0.15 + Math.random() * 0.3;
-      return `<div class="hero__particle" style="width:${size}px;height:${size}px;left:${left}%;opacity:${opacity};animation-duration:${dur}s;animation-delay:${delay}s"></div>`;
+      const color = particleColors[Math.floor(Math.random() * particleColors.length)];
+      return `<div class="hero__particle" style="width:${size}px;height:${size}px;left:${left}%;opacity:${opacity};animation-duration:${dur}s;animation-delay:${delay}s;background:${color}"></div>`;
     }).join('');
 
     return `

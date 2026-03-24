@@ -80,7 +80,20 @@
 .lightbox__art {
   position: relative;
   min-height: 380px;
+  overflow: hidden;
+  background: var(--bg-deep);
   transition: background var(--transition-slow);
+}
+
+.lightbox__art::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  background-image: var(--art-url, none);
+  background-size: cover;
+  background-position: center;
+  filter: blur(18px) brightness(0.3) saturate(0.7);
+  z-index: 0;
 }
 
 .lightbox__art::after {
@@ -89,13 +102,14 @@
   inset: 0;
   background: linear-gradient(to top, rgba(17, 27, 46, 0.5) 0%, transparent 50%);
   pointer-events: none;
+  z-index: 2;
 }
 
 .lightbox__price {
   position: absolute;
   top: 14px;
   left: 14px;
-  z-index: 2;
+  z-index: 3;
   padding: 5px 12px;
   border-radius: 20px;
   background: rgba(6, 10, 16, 0.72);
@@ -111,13 +125,14 @@
 .lightbox__art-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center top;
+  object-fit: contain;
   display: block;
+  position: relative;
+  z-index: 1;
 }
 
 .lightbox__art .tcg-card__rarity {
-  z-index: 2;
+  z-index: 3;
   top: 14px;
   right: 14px;
   font-size: 11px;
@@ -152,8 +167,8 @@
 .lightbox__name {
   font-size: 24px;
   font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   line-height: 1.2;
   margin: 0;

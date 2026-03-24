@@ -18,8 +18,8 @@
 .admin-title {
   font-size: 28px;
   font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   margin: 0 0 4px;
 }
@@ -462,8 +462,8 @@
 .admin-form__title {
   font-size: 18px;
   font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   margin: 0 0 20px;
 }

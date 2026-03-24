@@ -72,12 +72,14 @@ export class CardLightboxComponent extends Component {
     const artSrc = safeUrl(card.artUrl ?? '');
     if (artSrc) {
       art.style.background = '';
+      art.style.setProperty('--art-url', `url('${artSrc}')`);
       art.innerHTML = `
         <img class="lightbox__art-img" src="${artSrc}" alt="${esc(card.name)}">
         <span class="tcg-card__rarity ${esc(card.rarityClass)}">${esc(card.rarity.name)}</span>
         <span class="lightbox__price">$${card.price.toFixed(2)}</span>
       `;
     } else {
+      art.style.removeProperty('--art-url');
       art.style.background = card.artGradient;
       art.innerHTML = `
         <span class="tcg-card__rarity ${esc(card.rarityClass)}">${esc(card.rarity.name)}</span>
