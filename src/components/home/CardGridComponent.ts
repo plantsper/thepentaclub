@@ -1,6 +1,7 @@
 import { Component } from '../base/Component';
 import type { ICard, ICardCollection, IEventEmitter } from '../../types';
 import { esc, safeUrl, safeCss } from '../../utils/esc';
+import { variantLabel } from '../../utils/cardVariant';
 
 export class CardGridComponent extends Component {
   #collection: ICardCollection;
@@ -52,7 +53,6 @@ export class CardGridComponent extends Component {
             ? `<img class="tcg-card__art-img" src="${artSrc}" alt="${esc(card.name)}" loading="lazy">`
             : `<div class="tcg-card__art-bg" style="background:${gradient}"></div>`
           }
-          <span class="tcg-card__rarity ${esc(card.rarityClass)}">${esc(card.rarity.name)}</span>
           <span class="tcg-card__price-tag">$${card.price.toFixed(2)}</span>
         </div>
         <div class="tcg-card__info">
@@ -70,6 +70,11 @@ export class CardGridComponent extends Component {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
               ${card.defense}
             </span>
+          </div>
+          <div class="tcg-card__footer">
+            <span class="tcg-card__rarity-dot" style="background:${esc(card.rarity.colorHex)}"></span>
+            <span class="tcg-card__rarity-name">${esc(card.rarity.name)}</span>
+            ${variantLabel(card.variant) ? `<span class="tcg-card__variant-chip">${esc(variantLabel(card.variant)!)}</span>` : ''}
           </div>
         </div>
       </div>

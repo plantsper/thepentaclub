@@ -33,14 +33,14 @@
 > **Project override:** Existing accent is green (`--accent: #00e68a` approx). Keep green as the primary accent — it's established in the brand. Use these palette values as reference for secondary/supporting colors only.
 
 ## Typography
-- **Heading:** EB Garamond
+- **Heading:** Domine
 - **Body:** Chakra Petch
 - **Mood:** gaming, bold, action, esports, competitive, energetic — with editorial serif contrast
 - **Best For:** Gaming/TCG with premium collectible feel; serif headings contrast technical body font
-- **Google Fonts:** https://fonts.google.com/share?selection.family=Chakra+Petch:wght@300;400;500;600;700|EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400
+- **Google Fonts:** https://fonts.google.com/share?selection.family=Chakra+Petch:wght@300;400;500;600;700|Domine:wght@400;500;600;700
 - **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;500;600;700&family=Domine:wght@400;500;600;700&display=swap');
 ```
 
 ## Key Effects
