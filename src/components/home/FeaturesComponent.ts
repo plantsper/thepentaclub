@@ -19,7 +19,7 @@ export class FeaturesComponent extends Component {
     return `
       <section class="section" id="features">
         <div class="section__header">
-          <div class="section__label">Features</div>
+          <div class="section__label">What We Do</div>
           <h2 class="section__title">Built for Collectors & Competitors</h2>
           <p class="section__desc">Everything you need to build your ultimate Riftbound deck and dominate the arena.</p>
         </div>
