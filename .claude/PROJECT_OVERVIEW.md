@@ -283,6 +283,8 @@ src/
 │   ├── supabaseClient.ts           lazy singleton
 │   ├── AuthService.ts              signIn/Out/Reset/Update/getSession/onChange
 │   ├── CardService.ts              nested select query
+│   ├── CardOcrService.ts           Tesseract.js OCR — orientation-aware, per-zone preprocessing
+│   ├── RiftcodexService.ts         Riftcodex public API — fuzzy search + field mapping
 │   ├── EventEmitter.ts
 │   └── Router.ts
 ├── styles/
@@ -309,7 +311,79 @@ supabase/
 
 ---
 
-### 11. Known Gotchas
+### 11. Card Scanning — OCR + Riftcodex API
+
+#### Overview
+Admin card upload triggers an automatic scan pipeline to pre-fill form fields.
+
+#### Card Orientations (critical)
+Riftbound has **two physical card orientations** with completely different layouts:
+
+| Orientation | Card Types | Name position | Card number |
+|---|---|---|---|
+| **Portrait** (h > w) | Champion, Legend, Unit, Spell, Rune, Battlefield | Blue nameplate ~64-73% from top | Bottom-left bar `SFD • 239/221` |
+| **Landscape** (w > h) | Gear, Equipment | Vertical text on left edge of text panel | Bottom-right bar `SFD • 051/221` |
+
+Landscape cards must be **rotated 90° CCW** before applying portrait zones — after rotation the art panel is at the top and the text panel is at the bottom, matching the portrait layout.
+
+#### Scan Pipeline
+```
+Image uploaded
+    │
+    ├─ 1. Detect orientation (w > h → landscape → rotate 90° CCW)
+    │
+    ├─ 2. Preprocess zones (grayscale + 2× upscale + contrast)
+    │
+    ├─ 3. OCR name zone + type banner zone (two candidates)
+    │      typeBanner "CHAMPION UNIT • SORAKA • MOUNT TARGON" → extract "SORAKA" as second candidate
+    │
+    ├─ 4. OCR card number zone → extract set code ("SFD") + collector num
+    │
+    ├─ 5. Fuzzy search Riftcodex API with each name candidate
+    │      https://api.riftcodex.com/cards/name?fuzzy=<name>&size=5
+    │      Use set code as validation signal (prefer match where set.set_id === setCode)
+    │
+    └─ 6. OCR result → fills SEARCH BOX (not form directly)
+           User sees pre-filled search → confirms or corrects → Riftcodex fills all fields
+           Manual search box always available as override
+```
+
+#### Why Search-Box-First
+Direct OCR → form fill is too fragile for real-world card photos (holographic foil, perspective distortion, variable lighting). OCR fills the **search input** as a typing shortcut; the reliable data comes from the Riftcodex API after the user confirms.
+
+#### Riftcodex API (`src/services/RiftcodexService.ts`)
+- Base URL: `https://api.riftcodex.com` — public, no auth
+- `fuzzySearchCard(name, setCode?)` — returns best match + `setValidated` flag
+- Set code validation: if OCR setCode matches `card.set.set_id`, confidence is higher
+- Maps API fields to form: `energy→manaCost`, `might→attack`, `power→defense`
+- `media.image_url` auto-fills art URL (skips Supabase Storage upload for official cards)
+
+#### Riftcodex Type → DB CardType mapping
+| Riftcodex type | Our `CardType` |
+|---|---|
+| Champion, Legend, Unit, Unit Token | `'Champion'` |
+| Spell, Rune | `'Spell'` |
+| Gear, Battlefield | `'Artifact'` |
+
+#### OCR Service (`src/services/CardOcrService.ts`)
+- Tesseract.js v7 — lazy-loaded (WASM ~10 MB only when scanning)
+- Per-zone canvas preprocessing: crop → grayscale → 2× scale → contrast boost
+- `extractCardName(file)` — scans name zone + banner zone, returns two name candidates
+- `extractAllFields(file)` — full fallback, all zones, used when API returns nothing
+- Both functions handle landscape rotation automatically
+
+#### Card Number Format
+`SFD • 051/221` — set code + bullet separator + collector number / total
+Regex: `/([A-Z]{2,5})\s*[•·\-–]\s*(\d+)[/](\d+)/i`
+
+#### Known Limitations
+- Photos at steep angles may misalign zones even after rotation
+- Holographic/foil cards reduce OCR confidence — manual search override always available
+- OCR is a convenience hint, not a critical dependency — all fields can be filled manually
+
+---
+
+### 12. Known Gotchas
 
 | Issue | Fix |
 |---|---|

@@ -155,7 +155,11 @@ export class AdminPageComponent extends Component {
               </div>
               <div id="scanStatus" class="scan-status hidden"></div>
               <div class="scan-manual">
-                <input type="text" id="riftcodexSearch" placeholder="Override: type card name to search Riftcodex…" autocomplete="off">
+                <input type="text" id="cardCodeInput" placeholder="Card code (e.g. SFD-051)" autocomplete="off">
+                <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" id="cardCodeBtn">Look up</button>
+              </div>
+              <div class="scan-manual" style="margin-top:4px">
+                <input type="text" id="riftcodexSearch" placeholder="Or search by card name…" autocomplete="off">
                 <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" id="riftcodexSearchBtn">Search</button>
               </div>
               <input type="text" id="fArtUrl" placeholder="or paste public image URL" style="margin-top:8px">
@@ -207,10 +211,18 @@ export class AdminPageComponent extends Component {
       this.#updateArtPreview((e.target as HTMLInputElement).value.trim());
     });
 
+    document.getElementById('cardCodeBtn')?.addEventListener('click', () => this.#handleCardCodeLookup());
+    document.getElementById('cardCodeInput')?.addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') this.#handleCardCodeLookup();
+    });
+
     document.getElementById('riftcodexSearchBtn')?.addEventListener('click', () => this.#handleManualSearch());
     document.getElementById('riftcodexSearch')?.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key === 'Enter') this.#handleManualSearch();
     });
+
+    // Pre-fetch the Riftcodex card index in the background so lookups are instant when a card is uploaded
+    import('../../services/RiftcodexService').then(({ buildCardIndex }) => buildCardIndex()).catch(() => {});
 
     document.getElementById('tagForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -549,38 +561,50 @@ export class AdminPageComponent extends Component {
     statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Reading card…';
 
     try {
-      // Step 1: OCR name zone + type banner (two candidates) + card number
       const { extractCardName } = await import('../../services/CardOcrService');
-      const { name: ocrName, bannerName, setCode, cardNumber } = await extractCardName(file);
+      const { name: ocrName, bannerName, setCode, collectorNum, cardNumber } = await extractCardName(file);
 
-      // Step 2: Try Riftcodex with each name candidate until one matches
-      const { fuzzySearchCard } = await import('../../services/RiftcodexService');
+      const { lookupByCardCode, fuzzySearchCard, isIndexReady } = await import('../../services/RiftcodexService');
+
+      // ── Priority 1: exact card-code lookup (guaranteed match) ─────────────
       let match = null;
-      let matchedBy = '';
+      let method = '';
 
-      if (ocrName) {
-        match = await fuzzySearchCard(ocrName, setCode);
-        if (match) matchedBy = ocrName;
+      if (setCode && collectorNum && isIndexReady()) {
+        match = lookupByCardCode(setCode, collectorNum);
+        if (match) method = 'card-code';
       }
-      // If name zone failed, try the champion name extracted from the type banner
+
+      // ── Priority 2: also pre-fill the card code input for the user ────────
+      if (setCode && collectorNum) {
+        const codeInput = document.getElementById('cardCodeInput') as HTMLInputElement | null;
+        if (codeInput && !codeInput.value) codeInput.value = `${setCode}-${collectorNum}`;
+      }
+
+      // ── Priority 3: fuzzy name search (fallback) ──────────────────────────
+      if (!match && ocrName) {
+        match = await fuzzySearchCard(ocrName, setCode);
+        if (match) method = 'name';
+      }
       if (!match && bannerName) {
         match = await fuzzySearchCard(bannerName, setCode);
-        if (match) matchedBy = bannerName;
+        if (match) method = 'banner';
       }
 
       if (match) {
         this.#applyRiftcodexFields(match.fields);
-        const numInfo   = cardNumber ? ` · ${cardNumber}` : '';
-        const validated = match.fields.setValidated;
-        const setLabel  = setCode ? ` · ${setCode} ${validated ? '✓' : '⚠ unverified'}` : '';
-        const viaBanner = matchedBy === bannerName && matchedBy !== ocrName ? ' (via banner)' : '';
-        statusEl.className = `scan-status scan-status--${validated || !setCode ? 'success' : 'warning'}`;
+        const numInfo  = cardNumber ? ` · ${cardNumber}` : '';
+        const byCode   = method === 'card-code';
+        const validated = byCode || match.fields.setValidated;
+        const setLabel = setCode ? ` · ${setCode} ${validated ? '✓' : '⚠ unverified'}` : '';
+        const methodLabel = byCode ? 'card code' : method === 'banner' ? 'banner name' : 'name';
+        statusEl.className = `scan-status scan-status--${validated ? 'success' : 'warning'}`;
         statusEl.innerHTML =
-          `<span class="scan-status__icon">${validated || !setCode ? '✓' : '◈'}</span>` +
-          `<span>Found on Riftcodex: <strong>${match.fields.name}</strong>${setLabel}${numInfo}${viaBanner}</span>` +
-          `<span class="scan-status__badge">via API</span>`;
+          `<span class="scan-status__icon">${validated ? '✓' : '◈'}</span>` +
+          `<span>Found: <strong>${match.fields.name}</strong>${setLabel}${numInfo}</span>` +
+          `<span class="scan-status__badge">via ${methodLabel}</span>`;
       } else {
-        // Both candidates failed — fall back to full-card OCR
+        // All lookups failed — fall back to raw OCR fields
         const { extractAllFields } = await import('../../services/CardOcrService');
         const ocr = await extractAllFields(file);
         this.#applyOcrFields(ocr);
@@ -588,13 +612,57 @@ export class AdminPageComponent extends Component {
         statusEl.className = 'scan-status scan-status--warning';
         statusEl.innerHTML =
           `<span class="scan-status__icon">◈</span>` +
-          `<span>No Riftcodex match for ${tried || 'unknown'} — partial fields from image. ` +
-          `Use the search box below to find the card manually.</span>`;
+          `<span>No match for ${tried || 'unknown'} — partial OCR fill. ` +
+          `Enter the card code above for a guaranteed lookup.</span>`;
       }
     } catch (err) {
       statusEl.className = 'scan-status scan-status--error';
-      statusEl.textContent = 'Card scan failed — use the search box below to find the card manually.';
+      statusEl.textContent = 'Scan failed — enter the card code (e.g. SFD-051) above for a guaranteed lookup.';
       console.error('[CardScan]', err);
+    }
+  }
+
+  async #handleCardCodeLookup(): Promise<void> {
+    const input    = document.getElementById('cardCodeInput') as HTMLInputElement;
+    const statusEl = document.getElementById('scanStatus')!;
+    const raw      = input.value.trim().toUpperCase();
+    if (!raw) return;
+
+    // Accept formats: SFD-051  SFD–051  SFD•051  SFD 051
+    const m = raw.match(/^([A-Z]{2,5})[^A-Z0-9]*(\d+)$/);
+    if (!m) {
+      statusEl.className = 'scan-status scan-status--error';
+      statusEl.textContent = `Invalid format — use "SFD-051" (set code + collector number).`;
+      return;
+    }
+    const [, setCode, collectorNum] = m;
+
+    statusEl.className = 'scan-status scan-status--loading';
+    statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Looking up card…';
+
+    try {
+      const { lookupByCardCode, buildCardIndex, isIndexReady } = await import('../../services/RiftcodexService');
+
+      if (!isIndexReady()) {
+        statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Fetching card index…';
+        await buildCardIndex();
+      }
+
+      const match = lookupByCardCode(setCode, collectorNum);
+      if (match) {
+        this.#applyRiftcodexFields(match.fields);
+        statusEl.className = 'scan-status scan-status--success';
+        statusEl.innerHTML =
+          `<span class="scan-status__icon">✓</span>` +
+          `<span>Found: <strong>${match.fields.name}</strong> · ${setCode} ${collectorNum}</span>` +
+          `<span class="scan-status__badge">card code</span>`;
+      } else {
+        statusEl.className = 'scan-status scan-status--error';
+        statusEl.textContent = `No card found for ${setCode}-${collectorNum} — check the code and try again.`;
+      }
+    } catch {
+      statusEl.className = 'scan-status scan-status--error';
+      statusEl.textContent = 'Lookup failed — check your connection.';
     }
   }
 

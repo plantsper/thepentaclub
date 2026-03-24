@@ -2,20 +2,29 @@
  * RiftcodexService — client for the public Riftcodex TCG card API.
  * Base URL: https://api.riftcodex.com  (no auth required)
  *
- * Primary use-case: fuzzy-search a card by name after OCR extraction,
- * then map the rich API response to our AdminPageComponent form fields.
+ * ## Primary lookup strategy
+ *
+ * `buildCardIndex()` pre-fetches all ~939 cards once per session and builds an
+ * in-memory Map keyed by "SET_CODE:COLLECTOR_NUMBER" (e.g. "SFD:51").
+ *
+ * Once the index is ready, `lookupByCardCode(setCode, collectorNum)` gives an
+ * instant, guaranteed match from the card number OCR'd off the physical card.
+ *
+ * ## Fallback
+ *
+ * `fuzzySearchCard(name, setCode?)` is used when card-number OCR fails.
+ * Set code is used as a validation signal — not to swap to a different card.
  */
 
 const BASE = 'https://api.riftcodex.com';
 
-// ── API response types ───────────────────────────────────────────────────────
+// ── API types ─────────────────────────────────────────────────────────────────
 
 export interface RiftcodexCard {
   id: string;
   name: string;
   riftbound_id?: string;
-  collector_number?: number;    // numeric in the real API
-  public_code?: string;
+  collector_number?: number;
   attributes: {
     energy: number | null;
     might:  number | null;
@@ -33,8 +42,8 @@ export interface RiftcodexCard {
     flavour: string | null;
   };
   set: {
-    set_id: string;   // e.g. "SFD"
-    label:  string;   // e.g. "Spiritforged"
+    set_id: string;
+    label:  string;
   };
   tags: string[];
   media: {
@@ -42,15 +51,9 @@ export interface RiftcodexCard {
     artist:             string | null;
     accessibility_text: string | null;
   };
-  metadata?: {
-    clean_name:    string;
-    alternate_art: boolean;
-    overnumbered:  boolean;
-    signature:     boolean;
-  };
+  orientation?: string;
 }
 
-// Real API list wrapper uses "items", not "data"
 interface ApiListResponse<T> {
   items: T[];
   total: number;
@@ -59,37 +62,92 @@ interface ApiListResponse<T> {
   pages: number;
 }
 
-// ── Mapped result returned to the admin form ─────────────────────────────────
-
 export interface RiftcodexMatch {
-  source: 'riftcodex';
-  card:   RiftcodexCard;
-  /** Our form-ready values */
+  source:      'riftcodex';
+  lookupMethod: 'card-code' | 'fuzzy-name';
+  card:        RiftcodexCard;
   fields: {
     name:          string;
-    type?:         string;        // 'Champion' | 'Spell' | 'Artifact'
-    rarityName?:   string;        // matched against card_rarities.name
-    setName?:      string;        // matched against card_sets.name
+    type?:         string;
+    rarityName?:   string;
+    setName?:      string;
     manaCost?:     number;
     attack?:       number;
     defense?:      number;
     description?:  string;
-    imageUrl?:     string;        // Riftcodex CDN URL — can skip manual art upload
-    tags:          string[];      // tag names to cross-reference our tags table
-    setValidated?: boolean;       // true if OCR set code confirms the name match
+    imageUrl?:     string;
+    tags:          string[];
+    setValidated?: boolean;
   };
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
+// ── Card index (pre-fetched, module-level cache) ──────────────────────────────
+
+let _index: Map<string, RiftcodexCard> | null = null;
+let _indexPromise: Promise<void> | null = null;
+
+function indexKey(setCode: string, collectorNum: number | string): string {
+  return `${setCode.toUpperCase()}:${Number(collectorNum)}`;
+}
 
 /**
- * Fuzzy-search for a card by name.
+ * Pre-fetch all cards and build an in-memory lookup index.
+ * Safe to call multiple times — only fetches once per session.
  *
- * When a `setCode` is provided (e.g. "SFD" from OCR of "SFD • 249/221"),
- * it is used as a secondary validation signal: among multiple fuzzy candidates
- * we prefer the one whose set.set_id matches the OCR'd set code.
- *
- * Returns the best match or null if nothing was found / network error.
+ * Call this early (e.g. when the admin form opens) so it's ready by the time
+ * the user uploads a card image.
+ */
+export async function buildCardIndex(): Promise<void> {
+  if (_index) return;
+  if (_indexPromise) return _indexPromise;
+
+  _indexPromise = (async () => {
+    const allCards: RiftcodexCard[] = [];
+    let page = 1;
+
+    // Riftcodex has ~939 cards, max size=100 → ~10 pages
+    while (true) {
+      const resp = await fetch(`${BASE}/cards?size=100&page=${page}`, {
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!resp.ok) break;
+      const json = await resp.json() as ApiListResponse<RiftcodexCard>;
+      allCards.push(...(json.items ?? []));
+      if (page >= json.pages || (json.items?.length ?? 0) < 100) break;
+      page++;
+    }
+
+    _index = new Map(
+      allCards
+        .filter(c => c.set?.set_id && c.collector_number != null)
+        .map(c => [indexKey(c.set.set_id, c.collector_number!), c]),
+    );
+  })();
+
+  return _indexPromise;
+}
+
+/**
+ * Instant guaranteed lookup by set code + collector number.
+ * Returns null if the index hasn't loaded yet or the code isn't found.
+ */
+export function lookupByCardCode(setCode: string, collectorNum: number | string): RiftcodexMatch | null {
+  if (!_index) return null;
+  const card = _index.get(indexKey(setCode, collectorNum));
+  if (!card) return null;
+  return { source: 'riftcodex', lookupMethod: 'card-code', card, fields: mapFields(card) };
+}
+
+export function isIndexReady(): boolean {
+  return _index !== null;
+}
+
+// ── Fuzzy name search (fallback) ──────────────────────────────────────────────
+
+/**
+ * Fuzzy-search by card name.
+ * Set code is used as a validation signal only — it does NOT switch to a
+ * different card if the top name match is from a different set.
  */
 export async function fuzzySearchCard(
   name: string,
@@ -98,41 +156,32 @@ export async function fuzzySearchCard(
   if (!name.trim()) return null;
 
   try {
-    // Request a few candidates so we can pick the best set-code match
     const size = setCode ? 5 : 1;
     const url  = `${BASE}/cards/name?fuzzy=${encodeURIComponent(name.trim())}&size=${size}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const resp = await fetch(url, { signal: AbortSignal.timeout(8_000) });
     if (!resp.ok) return null;
 
     const json = await resp.json() as ApiListResponse<RiftcodexCard>;
     const candidates = json.items ?? [];
+    if (!candidates.length) return null;
 
-    if (candidates.length === 0) return null;
-
-    // Always take the top-ranked fuzzy name match as the primary result.
-    // If a setCode is provided, look for a same-name candidate from that set
-    // only — do not fall back to a completely different card just because it
-    // has the right set code (that would cause wrong-card returns on OCR errors).
     const best = candidates[0];
 
+    // Validate set code: true only if the top result is already from the right set
     let setValidated = false;
     if (setCode) {
-      // The name match is set-validated if the top result is already from the
-      // right set, OR another candidate with the same name is from that set.
-      const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const bestNameNorm = normalise(best.name);
-      const sameNameInSet = candidates.find(
-        c =>
-          c.set?.set_id?.toUpperCase() === setCode.toUpperCase() &&
-          normalise(c.name) === bestNameNorm,
-      );
-      setValidated = sameNameInSet !== undefined ||
-        best.set?.set_id?.toUpperCase() === setCode.toUpperCase();
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const bestNorm = norm(best.name);
+      setValidated = best.set?.set_id?.toUpperCase() === setCode.toUpperCase() ||
+        !!candidates.find(
+          c => c.set?.set_id?.toUpperCase() === setCode.toUpperCase() && norm(c.name) === bestNorm,
+        );
     }
 
     return {
       source: 'riftcodex',
-      card:   best,
+      lookupMethod: 'fuzzy-name',
+      card: best,
       fields: { ...mapFields(best), setValidated },
     };
   } catch {
@@ -141,36 +190,29 @@ export async function fuzzySearchCard(
 }
 
 /**
- * Full-text search — useful for a manual search input in the admin form.
+ * Full-text search — for the manual search input in the admin form.
  */
 export async function searchCards(query: string, size = 10): Promise<RiftcodexCard[]> {
   if (!query.trim()) return [];
-
   try {
     const url  = `${BASE}/cards/search?query=${encodeURIComponent(query.trim())}&size=${size}`;
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const resp = await fetch(url, { signal: AbortSignal.timeout(8_000) });
     if (!resp.ok) return [];
-
-    const json = await resp.json() as ApiListResponse<RiftcodexCard>;
-    return json.items ?? [];
+    return ((await resp.json()) as ApiListResponse<RiftcodexCard>).items ?? [];
   } catch {
     return [];
   }
 }
 
-// ── Mapping ──────────────────────────────────────────────────────────────────
+// ── Field mapping ─────────────────────────────────────────────────────────────
 
 function mapFields(card: RiftcodexCard): Omit<RiftcodexMatch['fields'], 'setValidated'> {
-  // Map Riftbound API types → our DB CardType (Champion | Spell | Artifact).
-  // Full Riftbound type list as of 2025:
-  //   Champion-like: Champion, Legend, Unit, Unit Token
-  //   Spell-like:    Spell, Rune
-  //   Artifact-like: Gear, Battlefield
+  // Riftbound type → our DB CardType
   const typeRaw = (card.classification?.type ?? '').toLowerCase();
   const type: string | undefined =
       ['champion', 'legend', 'unit'].some(t => typeRaw.includes(t)) ? 'Champion'
     : ['spell', 'rune'].some(t => typeRaw.includes(t))               ? 'Spell'
-    : ['gear', 'battlefield'].some(t => typeRaw.includes(t))         ? 'Artifact'
+    : ['gear', 'battlefield', 'equipment'].some(t => typeRaw.includes(t)) ? 'Artifact'
     : undefined;
 
   return {
@@ -178,7 +220,6 @@ function mapFields(card: RiftcodexCard): Omit<RiftcodexMatch['fields'], 'setVali
     type,
     rarityName:  card.classification?.rarity ?? undefined,
     setName:     card.set?.label             ?? undefined,
-    // energy = play cost; might = primary combat stat; power = secondary stat
     manaCost:    card.attributes?.energy     ?? undefined,
     attack:      card.attributes?.might      ?? undefined,
     defense:     card.attributes?.power      ?? undefined,
