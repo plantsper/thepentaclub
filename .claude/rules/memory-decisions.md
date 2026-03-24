@@ -46,3 +46,22 @@ The Supabase anon key (`sb_publishable_*`) is not a valid JWT. Passing it as Bea
 
 **CORS trailing-slash fix**
 `ALLOWED_ORIGIN` must not have a trailing slash — browser sends origin without one, so exact-match fails. Edge function strips it: `.replace(/\/$/, '')`.
+
+---
+
+## 2026-03-24 (this session)
+
+**Rarities must match Riftcodex exactly (migrations 007 + 008)**
+Migration 004 seeded placeholder names (`Legendary`) that don't exist in Riftbound. Riftcodex returns `Common`, `Uncommon`, `Rare`, `Epic`, `Showcase`, `Promo` — DB must match these exactly or every lookup silently falls back to `#rarities[0]`. `Showcase` is Riftcodex's term for overnumbered/showcase cards. Do not rename back to `Overnumbered`. `Ultimate` is kept for Set 3 (not yet in Riftcodex).
+
+**Variant suffix must be stripped before Riftcodex index lookup**
+Alt-art collectorNum `"201a"` → `Number("201a")` = NaN → key `"SFD:NaN"` → no match. Always strip `[a-z*]+$` from collectorNum before calling `lookupByCardCode`. The stripped number finds the base card; variant is applied after.
+
+**Overnumber/signature cards use "Showcase" rarity, not Riftcodex base rarity**
+Riftcodex returns the base card's rarity (e.g. "Rare") even for showcase variants. After lookup, if `variant === 'overnumber' || variant === 'signature'`, override `rarityName` to `'Showcase'` before the DB rarity lookup.
+
+**Variant is derived from card_code, not stored**
+`card_code` already encodes the variant (`"220/219"` = overnumber, `"000a/100"` = alt-art, `"200[*]/199"` = signature). `variantFromCardCode()` in `src/utils/cardVariant.ts` derives it at runtime. No DB column needed — do not suggest adding one unless querying/filtering by variant is required.
+
+**Rarity badge moved from card art to card info footer**
+Top-right rarity badge on `.tcg-card__art` removed. A footer row with colored dot + rarity name + optional variant chip now lives at the bottom of `.tcg-card__info`. The lightbox retains its own rarity bar separately.

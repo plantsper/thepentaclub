@@ -6,6 +6,40 @@ Rolling summary — most recent first. Keep last 5 sessions; archive older ones.
 
 ## 2026-03-24 (latest)
 
+**Rarity pipeline overhaul + variant metadata + card layout**
+
+**Rarity mapping fixed (migrations 007 + 008)**
+- Migration 007: renamed `Legendary` → `Uncommon`, added `Ultimate` + `Overnumbered`, reordered sort_orders
+- Discovered Riftcodex uses `"Showcase"` not `"Overnumbered"` by fetching the live API
+- Migration 008: renamed `Overnumbered` → `Showcase`, added `Promo` — DB now exactly matches Riftcodex rarity strings
+- Full Riftcodex rarity set: `Common`, `Uncommon`, `Rare`, `Epic`, `Showcase`, `Promo` (`Ultimate` kept for Set 3)
+- CSS rarity badge classes added: `--uncommon`, `--showcase`, `--promo`, `--ultimate`
+
+**Variant detection hardened**
+- Root cause of "everything tagged Ultimate": alt-art collectorNum `"201a"` → `Number("201a")` = NaN → index key `"SFD:NaN"` → no Riftcodex match → silent fallback to `#rarities[0]`
+- Fix: strip letter/asterisk suffix before lookup (`"201a"` → `"201"`) in both scan paths
+- Overnumber/signature variants now override Riftcodex rarity to `"Showcase"` after lookup
+- `detectVariant` + `variantFromCardCode` + `variantLabel` extracted to `src/utils/cardVariant.ts` (shared utility)
+- `CardOcrService` now re-exports `CardVariant` type from shared util
+- `variant` getter added to `Card` model — derived from stored `card_code` at runtime, no DB column needed
+- `ICard` interface updated with `readonly variant: CardVariant`
+
+**Variant surfaced in UI**
+- Admin table: variant badge (`Alt Art` / `Overnumber` / `Signature`) shown inline in the Code column
+- Lightbox: variant badge shown in type-line alongside card type badge
+
+**Card layout**
+- Top-right rarity badge removed from card art in both `CardGridComponent` and `CardsPageComponent`
+- Footer row added to `.tcg-card__info`: colored rarity dot (from `rarity.colorHex`) + rarity name + optional variant chip
+- `aspect-ratio: 3/4.2` → `3/4.7`; art height `65%` → `58%`; info bottom padding increased to `18px`
+
+**Heading font**
+- `EB Garamond` → `Domine` (weights 400–700); updated `_variables.css`, `index.html`, `design-system.md`
+
+---
+
+## 2026-03-24 (previous)
+
 **Design system migration + heading font refinement**
 - Google Fonts: `Outfit`/`Crimson Pro` → `EB Garamond` (headings) + `Chakra Petch` (body)
 - `--font-display: 'EB Garamond', serif` in `_variables.css` and `index.html` inline `:root`

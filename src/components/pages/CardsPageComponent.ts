@@ -115,16 +115,6 @@ export class CardsPageComponent extends Component {
             ${card.cardSetCode ? `<span class="tcg-card__code">${esc(card.cardSetCode)}${card.cardCode ? ` ${esc(card.cardCode)}` : ''}</span>` : ''}
           </div>
           <div class="tcg-card__type">${esc(card.type)} &mdash; ${esc(card.set.name)}</div>
-          <div class="tcg-card__stats-row">
-            <span class="tcg-card__stat tcg-card__stat--atk">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M14.7 2.3a1 1 0 0 0-1.4 0l-4.6 4.6L6 4.2a1 1 0 0 0-1.4 0L2.3 6.5a1 1 0 0 0 0 1.4L5 10.6l-2.3 2.3a1 1 0 0 0 0 1.4l6 6a1 1 0 0 0 1.4 0l2.3-2.3 2.7 2.7a1 1 0 0 0 1.4 0l2.3-2.3a1 1 0 0 0 0-1.4L16.1 14.3l4.6-4.6a1 1 0 0 0 0-1.4l-6-6z"/></svg>
-              ${card.attack}
-            </span>
-            <span class="tcg-card__stat tcg-card__stat--def">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L3 7v5c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
-              ${card.defense}
-            </span>
-          </div>
           <div class="tcg-card__footer">
             <span class="tcg-card__rarity-dot" style="background:${esc(card.rarity.colorHex)}"></span>
             <span class="tcg-card__rarity-name">${esc(card.rarity.name)}</span>

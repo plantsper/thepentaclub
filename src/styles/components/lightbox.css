@@ -28,14 +28,14 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 300px 1fr;
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   overflow: hidden;
   width: 100%;
   max-width: 680px;
-  max-height: 88vh;
+  max-height: 92vh;
   transform: scale(0.94) translateY(16px);
   transition: transform var(--transition-med);
   box-shadow:
@@ -131,14 +131,6 @@
   z-index: 1;
 }
 
-.lightbox__art .tcg-card__rarity {
-  z-index: 3;
-  top: 14px;
-  right: 14px;
-  font-size: 11px;
-  padding: 4px 12px;
-}
-
 /* ── Body panel ── */
 
 .lightbox__body {
@@ -222,43 +214,6 @@
   flex: 1;
 }
 
-/* ── Stats ── */
-
-.lightbox__stats {
-  display: flex;
-  gap: 10px;
-}
-
-.lightbox__stat {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  padding: 14px 8px 12px;
-  border-radius: var(--radius-md);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-}
-
-.lightbox__stat span {
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.lightbox__stat label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.lightbox__stat--atk   { color: #ff6b6b; }
-.lightbox__stat--def   { color: #4ecdc4; }
-.lightbox__stat--price { color: var(--accent); }
-
 /* ── Rarity bar ── */
 
 .lightbox__rarity-bar {
@@ -268,7 +223,10 @@
   padding: 10px 14px;
   border-radius: var(--radius-md);
   border: 1px solid;
-  margin-top: auto;
+}
+
+.lightbox__rarity-bar .lightbox__card-code {
+  margin-left: auto;
 }
 
 .lightbox__rarity-dot {
