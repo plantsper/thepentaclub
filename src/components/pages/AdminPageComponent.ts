@@ -539,6 +539,18 @@ export class AdminPageComponent extends Component {
     const statusEl   = document.getElementById('uploadStatus')!;
     const artUrlInput = document.getElementById('fArtUrl') as HTMLInputElement;
 
+    const ALLOWED_MIME: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png':  'png',
+      'image/webp': 'webp',
+    };
+    const ext = ALLOWED_MIME[file.type];
+    if (!ext) {
+      statusEl.textContent = 'Unsupported file type (JPEG, PNG, or WebP only).';
+      statusEl.classList.remove('hidden');
+      return;
+    }
+
     if (file.size > 5 * 1024 * 1024) {
       statusEl.textContent = 'File too large (max 5 MB).';
       statusEl.classList.remove('hidden');
@@ -550,7 +562,6 @@ export class AdminPageComponent extends Component {
     statusEl.classList.remove('hidden');
 
     try {
-      const ext  = file.name.split('.').pop() ?? 'jpg';
       const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
       const { error: uploadError } = await getSupabaseClient()
@@ -614,7 +625,7 @@ export class AdminPageComponent extends Component {
         statusEl.className = 'scan-status scan-status--warning';
         statusEl.innerHTML =
           `<span class="scan-status__icon">◈</span>` +
-          `<span>Read code <strong>${cardNumber ?? `${setCode}-${collectorNum}`}</strong> but not found in Riftcodex. ` +
+          `<span>Read code <strong>${esc(cardNumber ?? `${setCode}-${collectorNum}`)}</strong> but not found in Riftcodex. ` +
           `Verify the code above and hit "Look up".</span>`;
       } else {
         statusEl.className = 'scan-status scan-status--warning';

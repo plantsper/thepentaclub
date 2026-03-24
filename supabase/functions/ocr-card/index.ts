@@ -10,9 +10,15 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 
+// Lock CORS to your app's origin.
+// Set ALLOWED_ORIGIN secret: supabase secrets set ALLOWED_ORIGIN=https://yourdomain.com
+// Falls back to * only when unset (local dev).
+const ALLOWED_ORIGIN = Deno.env.get('ALLOWED_ORIGIN') ?? '*';
+
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Vary': 'Origin',
 };
 
 function json(body: unknown, status = 200): Response {
@@ -44,9 +50,14 @@ serve(async (req) => {
     return json({ error: 'Invalid JSON body' }, 400);
   }
 
-  // Reject absurdly large payloads (>4 MB base64 ≈ ~3 MB image)
+  // Reject oversized payloads (>4 MB base64 ≈ ~3 MB image)
   if (image.length > 4_000_000) {
     return json({ error: 'Image too large' }, 413);
+  }
+
+  // Validate it is actually base64 before forwarding to Anthropic
+  if (!/^[A-Za-z0-9+/]+=*$/.test(image)) {
+    return json({ error: 'Invalid image encoding' }, 400);
   }
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
