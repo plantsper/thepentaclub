@@ -49,11 +49,25 @@ export class CardsPageComponent extends Component {
   afterMount(): void {
     this.#renderGrid();
 
-    document.getElementById('cardsGrid')?.addEventListener('click', (e) => {
+    const grid = document.getElementById('cardsGrid');
+    grid?.addEventListener('click', (e) => {
       const card = (e.target as HTMLElement).closest<HTMLElement>('.tcg-card');
       if (!card) return;
       const found = this.#collection.all.find(c => c.id === card.dataset.cardId);
       if (found) this.#events.emit('card:open', found);
+    });
+
+    // Preload lightbox images on hover so they're cached before the user clicks
+    const preloaded = new Set<string>();
+    grid?.addEventListener('mouseover', (e) => {
+      const card = (e.target as HTMLElement).closest<HTMLElement>('.tcg-card');
+      if (!card?.dataset.cardId || preloaded.has(card.dataset.cardId)) return;
+      preloaded.add(card.dataset.cardId);
+      const found = this.#collection.all.find(c => c.id === card.dataset.cardId);
+      if (!found) return;
+      [found.artUrl, found.riftcodexArtUrl].forEach(url => {
+        if (url) { const img = new Image(); img.src = url; }
+      });
     });
 
     const searchInput = document.getElementById('cardSearch') as HTMLInputElement | null;
@@ -105,7 +119,7 @@ export class CardsPageComponent extends Component {
       <div class="tcg-card stagger-in" style="transition-delay:${Math.min(i * 0.04, 0.5)}s" data-card-id="${card.id}">
         <div class="tcg-card__art">
           ${artSrc
-            ? `<img class="tcg-card__art-img" src="${artSrc}" alt="${esc(card.name)}" loading="lazy">`
+            ? `<img class="tcg-card__art-img" src="${artSrc}" alt="${esc(card.name)}" loading="lazy" decoding="async">`
             : `<div class="tcg-card__art-bg" style="background:${safeCss(card.artGradient)}"></div>`
           }
           <span class="tcg-card__price-tag">$${card.price.toFixed(2)}</span>

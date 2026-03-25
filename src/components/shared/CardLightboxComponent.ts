@@ -107,7 +107,7 @@ export class CardLightboxComponent extends Component {
       ? artImages.map((img, i) => `
           <div class="lightbox__slide${i === 0 ? ' lightbox__slide--active' : ''}"
                style="--art-url: url('${img.src}')">
-            <img class="lightbox__art-img" src="${img.src}" alt="${esc(card.name)}">
+            <img class="lightbox__art-img" src="${img.src}" alt="${esc(card.name)}" decoding="async">
             ${i === 0 ? priceHtml : ''}
           </div>
         `).join('')
