@@ -54,8 +54,8 @@ async function fileToBase64Jpeg(file: File, maxDim = 1024): Promise<string> {
 // Parse the card code from Claude's free-text response.
 // Handles: standard (170/221), overnumber (100/99), alt-art (000a/100), signature (200[*]/199)
 function parseCardCode(text: string): OcrCardResult {
-  // collectorNum captures digits + optional letter or asterisk suffix
-  const m = text.match(/([A-Z]{2,5})\s*[•·\-–\s]\s*(\d+[a-z*]?)(?:[/](\d+))?/i);
+  // collectorNum: optional letter prefix (rune cards: R01a), digits, optional letter/asterisk suffix
+  const m = text.match(/([A-Z]{2,5})\s*[•·\-–\s]\s*([a-z]?\d+[a-z*]?)(?:[/](\d+))?/i);
   if (m) {
     const collectorNum = m[2];
     const total        = m[3];
@@ -68,7 +68,7 @@ function parseCardCode(text: string): OcrCardResult {
     };
   }
   // Bare number/total with no set code — try to detect variant at least
-  const bare = text.match(/(\d+[a-z*]?)[/](\d+)/i);
+  const bare = text.match(/([a-z]?\d+[a-z*]?)[/](\d+)/i);
   if (bare) {
     return {
       cardNumber:  `${bare[1]}/${bare[2]}`,

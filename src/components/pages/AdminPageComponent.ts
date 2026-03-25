@@ -1,9 +1,11 @@
 import { Component } from '../base/Component';
 import { getSupabaseClient } from '../../services/supabaseClient';
-import type { CardType } from '../../types';
 import { esc } from '../../utils/esc';
 import { variantFromCardCode, variantLabel } from '../../utils/cardVariant';
+import type { CardVariant } from '../../utils/cardVariant';
 import { buildCardIndex, lookupByCardCode, fuzzySearchCard, isIndexReady } from '../../services/RiftcodexService';
+import { warmIndexFromCatalog, lookupOrFetch } from '../../services/CatalogService';
+import type { CatalogEntryInput } from '../../services/CatalogService';
 
 // Minimal shape used by #applyRiftcodexFields — mirrors RiftcodexMatch['fields']
 interface RiftcodexFields {
@@ -11,11 +13,10 @@ interface RiftcodexFields {
   type?:        string;
   rarityName?:  string;
   setName?:     string;
-  manaCost?:    number;
   attack?:      number;
   defense?:     number;
   description?: string;
-  imageUrl?:    string;   // CDN URL from Riftcodex — skips manual art upload
+  imageUrl?:    string;
   tags:         string[];
   energy?:      number;
   supertype?:   string;
@@ -31,22 +32,17 @@ interface TagOption     { id: number; name: string }
 
 interface AdminCard {
   id: string;
-  name: string;
-  type: CardType;
   rarity_id: number;
   set_id: number;
   price: number;
-  attack: number;
-  defense: number;
-  description: string;
   art_gradient: string;
   art_url: string | null;
-  riftcodex_art_url: string | null;
   card_set_code: string | null;
   card_code: string | null;
+  catalog_id: string | null;
   card_rarities: { id: number; name: string };
   card_sets: { id: number; name: string };
-  card_tags: { tags: TagOption }[];
+  riftcodex_catalog: { name: string; type: string | null; image_url: string | null } | null;
 }
 
 export class AdminPageComponent extends Component {
@@ -58,7 +54,6 @@ export class AdminPageComponent extends Component {
   #uploadingArt             = false;
   #selectedIds: Set<string> = new Set();
   #bulkItems: { file: File; url: string }[] = [];
-  #lastRiftcodexMatch: RiftcodexFields | null = null;
 
   // Typed getElementById that throws if the element is missing — safer than `!` casts.
   #el<T extends HTMLElement>(id: string): T {
@@ -134,17 +129,14 @@ export class AdminPageComponent extends Component {
           <div id="formSuccess" class="auth-feedback auth-feedback--success hidden"></div>
 
           <div class="admin-form__grid">
+            <input type="hidden" id="fCatalogId">
             <div class="form-group">
-              <label for="fName">Name *</label>
-              <input type="text" id="fName" required placeholder="Card name">
+              <label for="fName">Name <span style="font-size:11px;color:var(--text-muted)">(from Riftcodex)</span></label>
+              <input type="text" id="fName" readonly placeholder="Auto-filled from scan / lookup">
             </div>
             <div class="form-group">
-              <label for="fType">Type *</label>
-              <select id="fType">
-                <option value="Champion">Champion</option>
-                <option value="Spell">Spell</option>
-                <option value="Artifact">Artifact</option>
-              </select>
+              <label for="fType">Type <span style="font-size:11px;color:var(--text-muted)">(from Riftcodex)</span></label>
+              <input type="text" id="fType" readonly placeholder="Auto-filled from scan / lookup">
             </div>
             <div class="form-group">
               <label for="fRarity">Rarity *</label>
@@ -167,24 +159,8 @@ export class AdminPageComponent extends Component {
               <input type="number" id="fPrice" min="0" step="0.01" value="0.00">
             </div>
             <div class="form-group">
-              <label for="fAttack">Power</label>
-              <input type="number" id="fAttack" min="0" max="99" value="0">
-            </div>
-            <div class="form-group">
-              <label for="fDefense">Health</label>
-              <input type="number" id="fDefense" min="0" max="99" value="0">
-            </div>
-            <div class="form-group">
               <label for="fGradient">Art Gradient (CSS fallback)</label>
               <input type="text" id="fGradient" placeholder="linear-gradient(135deg, #1e3350 0%, #0a1628 100%)">
-            </div>
-            <div class="form-group form-group--full">
-              <label for="fDesc">Description</label>
-              <textarea id="fDesc" rows="3" placeholder="Card ability or flavor text"></textarea>
-            </div>
-            <div class="form-group form-group--full">
-              <label>Tags</label>
-              <div id="tagsCheckboxes" class="tags-checkbox-list"></div>
             </div>
             <div class="form-group form-group--full">
               <label>Card Art</label>
@@ -203,7 +179,6 @@ export class AdminPageComponent extends Component {
                 <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" id="riftcodexSearchBtn">Search</button>
               </div>
               <input type="text" id="fArtUrl" placeholder="or paste public image URL" style="margin-top:8px">
-              <input type="hidden" id="fRiftcodexArtUrl">
               <div id="artPreviewWrap" class="art-preview hidden">
                 <img id="artPreview" src="" alt="Art preview">
               </div>
@@ -325,8 +300,10 @@ export class AdminPageComponent extends Component {
       this.#updateBulkToolbar();
     });
 
-    // Pre-fetch the Riftcodex card index in the background so lookups are instant when a card is uploaded
-    buildCardIndex().catch(() => {});
+    // Warm index from DB catalog first; fall back to full API fetch if catalog is empty
+    warmIndexFromCatalog()
+      .then(warmed => { if (!warmed) buildCardIndex().catch(() => {}); })
+      .catch(() => buildCardIndex().catch(() => {}));
 
     document.getElementById('tagForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -436,11 +413,11 @@ export class AdminPageComponent extends Component {
     try {
       const { data, error } = await getSupabaseClient()
         .from('cards')
-        .select(`*, card_rarities(id, name), card_sets(id, name), card_tags(tags(id, name))`)
+        .select(`id, price, art_gradient, art_url, card_set_code, card_code, catalog_id, rarity_id, set_id, card_rarities(id, name), card_sets(id, name), riftcodex_catalog(name, type, image_url)`)
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      this.#cards = (data as AdminCard[]) ?? [];
+      this.#cards = (data as unknown as AdminCard[]) ?? [];
       this.#renderTable();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load cards';
@@ -463,26 +440,27 @@ export class AdminPageComponent extends Component {
     }
 
     tbody.innerHTML = this.#cards.map(card => {
-      const tagNames = card.card_tags?.map(ct => esc(ct.tags.name)).join(', ') || '—';
+      const cardName   = card.riftcodex_catalog?.name ?? '—';
+      const cardType   = card.riftcodex_catalog?.type ?? '—';
       const rarityName = card.card_rarities?.name ?? '—';
       return `
         <tr data-id="${esc(card.id)}">
           <td class="admin-table__check"><input type="checkbox" class="row-select" data-id="${esc(card.id)}"></td>
-          <td class="admin-table__name">${esc(card.name)}</td>
+          <td class="admin-table__name">${esc(cardName)}</td>
           <td class="admin-table__code">${(() => {
             if (!card.card_set_code || !card.card_code) return '—';
             const vLabel = variantLabel(variantFromCardCode(card.card_code));
             return `${esc(card.card_set_code)} ${esc(card.card_code)}${vLabel ? ` <span class="admin-badge admin-badge--variant">${esc(vLabel)}</span>` : ''}`;
           })()}</td>
-          <td><span class="admin-badge admin-badge--type">${esc(card.type)}</span></td>
+          <td><span class="admin-badge admin-badge--type">${esc(cardType)}</span></td>
           <td><span class="admin-badge admin-badge--${esc(rarityName.toLowerCase())}">${esc(rarityName)}</span></td>
           <td class="admin-table__set">${esc(card.card_sets?.name ?? '—')}</td>
-          <td class="admin-table__tags">${tagNames}</td>
+          <td class="admin-table__tags">—</td>
           <td class="admin-table__price">$${Number(card.price).toFixed(2)}</td>
           <td>${card.art_url ? '<span class="admin-art-dot--yes">✓</span>' : '<span class="admin-art-dot--no">—</span>'}</td>
           <td class="admin-table__actions">
-            <button class="admin-btn admin-btn--sm" data-action="edit" data-id="${esc(card.id)}" aria-label="Edit ${esc(card.name)}">Edit</button>
-            <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${esc(card.id)}" aria-label="Delete ${esc(card.name)}">Delete</button>
+            <button class="admin-btn admin-btn--sm" data-action="edit" data-id="${esc(card.id)}" aria-label="Edit ${esc(cardName)}">Edit</button>
+            <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${esc(card.id)}" aria-label="Delete ${esc(cardName)}">Delete</button>
           </td>
         </tr>
       `;
@@ -491,60 +469,39 @@ export class AdminPageComponent extends Component {
 
   #openForm(id: string | null): void {
     this.#editingId = id;
-    this.#lastRiftcodexMatch = null;
     const formEl  = document.getElementById('adminForm')!;
     const titleEl = document.getElementById('formTitle')!;
     document.getElementById('formError')?.classList.add('hidden');
     document.getElementById('formSuccess')?.classList.add('hidden');
 
-    // Populate tag checkboxes
-    const currentTagIds = id
-      ? (this.#cards.find(c => c.id === id)?.card_tags ?? []).map(ct => ct.tags.id)
-      : [];
-    const tagsEl = document.getElementById('tagsCheckboxes')!;
-    tagsEl.innerHTML = this.#allTags.length === 0
-      ? '<span style="font-size:12px;color:var(--text-muted)">No tags yet — add them in the Tags section above.</span>'
-      : this.#allTags.map(t => `
-          <label class="tag-checkbox">
-            <input type="checkbox" value="${t.id}" ${currentTagIds.includes(t.id) ? 'checked' : ''}>
-            <span>${t.name}</span>
-          </label>
-        `).join('');
-
     if (id) {
       const card = this.#cards.find(c => c.id === id);
       if (!card) return;
       titleEl.textContent = 'Edit Card';
-      (document.getElementById('fName')     as HTMLInputElement).value    = card.name;
-      (document.getElementById('fType')     as HTMLSelectElement).value   = card.type;
-      (document.getElementById('fRarity')   as HTMLSelectElement).value   = String(card.rarity_id);
-      (document.getElementById('fSet')      as HTMLSelectElement).value   = String(card.set_id);
+      (document.getElementById('fName')        as HTMLInputElement).value  = card.riftcodex_catalog?.name ?? '';
+      (document.getElementById('fType')        as HTMLInputElement).value  = card.riftcodex_catalog?.type ?? '';
+      (document.getElementById('fCatalogId')   as HTMLInputElement).value  = card.catalog_id ?? '';
+      (document.getElementById('fRarity')      as HTMLSelectElement).value = String(card.rarity_id);
+      (document.getElementById('fSet')         as HTMLSelectElement).value = String(card.set_id);
       (document.getElementById('fCardSetCode') as HTMLInputElement).value  = card.card_set_code ?? '';
       (document.getElementById('fCardCode')    as HTMLInputElement).value  = card.card_code ?? '';
-      (document.getElementById('fPrice')    as HTMLInputElement).value    = card.price.toFixed(2);
-      (document.getElementById('fAttack')   as HTMLInputElement).value    = String(card.attack);
-      (document.getElementById('fDefense')  as HTMLInputElement).value    = String(card.defense);
-      (document.getElementById('fDesc')     as HTMLTextAreaElement).value = card.description;
-      (document.getElementById('fGradient') as HTMLInputElement).value    = card.art_gradient;
-      (document.getElementById('fArtUrl')           as HTMLInputElement).value = card.art_url ?? '';
-      (document.getElementById('fRiftcodexArtUrl')  as HTMLInputElement).value = card.riftcodex_art_url ?? '';
-      this.#updateArtPreview(card.art_url ?? '');
+      (document.getElementById('fPrice')       as HTMLInputElement).value  = Number(card.price).toFixed(2);
+      (document.getElementById('fGradient')    as HTMLInputElement).value  = card.art_gradient;
+      (document.getElementById('fArtUrl')      as HTMLInputElement).value  = card.art_url ?? '';
+      this.#updateArtPreview(card.art_url ?? card.riftcodex_catalog?.image_url ?? '');
     } else {
       titleEl.textContent = 'Add Card';
-      (document.getElementById('fName')     as HTMLInputElement).value    = '';
-      (document.getElementById('fType')     as HTMLSelectElement).value   = 'Champion';
-      (document.getElementById('fRarity')   as HTMLSelectElement).value   = String(this.#rarities[0]?.id ?? '');
-      (document.getElementById('fSet')      as HTMLSelectElement).value   = String(this.#sets[0]?.id ?? '');
+      (document.getElementById('fName')        as HTMLInputElement).value  = '';
+      (document.getElementById('fType')        as HTMLInputElement).value  = '';
+      (document.getElementById('fCatalogId')   as HTMLInputElement).value  = '';
+      (document.getElementById('fRarity')      as HTMLSelectElement).value = String(this.#rarities[0]?.id ?? '');
+      (document.getElementById('fSet')         as HTMLSelectElement).value = String(this.#sets[0]?.id ?? '');
       (document.getElementById('fCardSetCode') as HTMLInputElement).value  = '';
       (document.getElementById('fCardCode')    as HTMLInputElement).value  = '';
-      (document.getElementById('fPrice')    as HTMLInputElement).value    = '0.00';
-      (document.getElementById('fAttack')   as HTMLInputElement).value    = '0';
-      (document.getElementById('fDefense')  as HTMLInputElement).value    = '0';
-      (document.getElementById('fDesc')     as HTMLTextAreaElement).value = '';
-      (document.getElementById('fGradient') as HTMLInputElement).value    = 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)';
-      (document.getElementById('fArtUrl')          as HTMLInputElement).value = '';
-      (document.getElementById('fRiftcodexArtUrl') as HTMLInputElement).value = '';
-      (document.getElementById('fArtFile')         as HTMLInputElement).value = '';
+      (document.getElementById('fPrice')       as HTMLInputElement).value  = '0.00';
+      (document.getElementById('fGradient')    as HTMLInputElement).value  = 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)';
+      (document.getElementById('fArtUrl')      as HTMLInputElement).value  = '';
+      (document.getElementById('fArtFile')     as HTMLInputElement).value  = '';
       this.#updateArtPreview('');
     }
 
@@ -565,13 +522,6 @@ export class AdminPageComponent extends Component {
     errorEl.classList.add('hidden');
     successEl.classList.add('hidden');
 
-    const name = this.#el<HTMLInputElement>('fName').value.trim();
-    if (!name) {
-      errorEl.textContent = 'Name is required.';
-      errorEl.classList.remove('hidden');
-      return;
-    }
-
     const rarityId = Number(this.#el<HTMLSelectElement>('fRarity').value);
     if (!rarityId) {
       errorEl.textContent = 'Please select a rarity.';
@@ -586,32 +536,19 @@ export class AdminPageComponent extends Component {
       return;
     }
 
-    const riftMatch = this.#lastRiftcodexMatch;
+    const catalogId = this.#el<HTMLInputElement>('fCatalogId').value.trim() || null;
+
     const payload = {
-      name,
-      type:          this.#el<HTMLSelectElement>('fType').value as CardType,
       rarity_id:     rarityId,
       set_id:        setId,
+      catalog_id:    catalogId,
       card_set_code: this.#el<HTMLInputElement>('fCardSetCode').value.trim().toUpperCase() || null,
       card_code:     this.#el<HTMLInputElement>('fCardCode').value.trim() || null,
       price:         parseFloat(this.#el<HTMLInputElement>('fPrice').value) || 0,
-      attack:      Number(this.#el<HTMLInputElement>('fAttack').value)  || 0,
-      defense:     Number(this.#el<HTMLInputElement>('fDefense').value) || 0,
-      description: this.#el<HTMLTextAreaElement>('fDesc').value.trim(),
-      art_gradient: this.#el<HTMLInputElement>('fGradient').value.trim()
-                   || 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
-      art_url:           this.#el<HTMLInputElement>('fArtUrl').value.trim() || null,
-      riftcodex_art_url: this.#el<HTMLInputElement>('fRiftcodexArtUrl').value.trim() || null,
-      energy:      riftMatch?.energy    ?? 0,
-      supertype:   riftMatch?.supertype ?? null,
-      domains:     riftMatch?.domains   ?? [],
-      flavour:     riftMatch?.flavour   ?? null,
-      artist:      riftMatch?.artist    ?? null,
+      art_gradient:  this.#el<HTMLInputElement>('fGradient').value.trim()
+                     || 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
+      art_url:       this.#el<HTMLInputElement>('fArtUrl').value.trim() || null,
     };
-
-    const selectedTagIds = Array.from(
-      document.querySelectorAll<HTMLInputElement>('#tagsCheckboxes input[type="checkbox"]:checked')
-    ).map(cb => Number(cb.value));
 
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving…';
@@ -626,14 +563,6 @@ export class AdminPageComponent extends Component {
         const { data, error } = await getSupabaseClient().from('cards').insert([payload]).select('id').single();
         if (error) throw error;
         cardId = (data as { id: string }).id;
-      }
-
-      // Sync tags: replace all
-      await getSupabaseClient().from('card_tags').delete().eq('card_id', cardId);
-      if (selectedTagIds.length > 0) {
-        await getSupabaseClient().from('card_tags').insert(
-          selectedTagIds.map(tagId => ({ card_id: cardId, tag_id: tagId }))
-        );
       }
 
       successEl.textContent = this.#editingId ? 'Card updated.' : 'Card added.';
@@ -673,8 +602,9 @@ export class AdminPageComponent extends Component {
     const row = document.querySelector<HTMLElement>(`tr[data-id="${id}"]`);
     const actionsCell = row?.querySelector<HTMLElement>('.admin-table__actions');
     if (!actionsCell) return;
+    const cardName = card.riftcodex_catalog?.name ?? id;
     actionsCell.innerHTML = `
-      <span class="admin-delete-confirm__label">Delete "${esc(card.name)}"?</span>
+      <span class="admin-delete-confirm__label">Delete "${esc(cardName)}"?</span>
       <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="confirm-delete" data-id="${esc(id)}">Yes</button>
       <button class="admin-btn admin-btn--sm admin-btn--ghost"  data-action="cancel-delete"  data-id="${esc(id)}">No</button>
     `;
@@ -686,9 +616,10 @@ export class AdminPageComponent extends Component {
     const row = document.querySelector<HTMLElement>(`tr[data-id="${id}"]`);
     const actionsCell = row?.querySelector<HTMLElement>('.admin-table__actions');
     if (!actionsCell) return;
+    const cardName = card.riftcodex_catalog?.name ?? id;
     actionsCell.innerHTML = `
-      <button class="admin-btn admin-btn--sm" data-action="edit" data-id="${esc(id)}" aria-label="Edit ${esc(card.name)}">Edit</button>
-      <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${esc(id)}" aria-label="Delete ${esc(card.name)}">Delete</button>
+      <button class="admin-btn admin-btn--sm" data-action="edit" data-id="${esc(id)}" aria-label="Edit ${esc(cardName)}">Edit</button>
+      <button class="admin-btn admin-btn--sm admin-btn--danger" data-action="delete" data-id="${esc(id)}" aria-label="Delete ${esc(cardName)}">Delete</button>
     `;
   }
 
@@ -846,13 +777,11 @@ export class AdminPageComponent extends Component {
         let setCode: string | undefined;
         let collectorNum: string | undefined;
         let cardNumber: string | undefined;
-        let variant: string | undefined;
         try {
           const result = await extractCardCode(file);
           setCode      = result.setCode;
           collectorNum = result.collectorNum;
           cardNumber   = result.cardNumber;
-          variant      = result.variant;
         } catch {
           this.#setQueueItemStatus(i, 'error', 'Scan failed');
           continue;
@@ -863,27 +792,25 @@ export class AdminPageComponent extends Component {
           continue;
         }
 
-        // Step 2 — Riftcodex lookup
-        // Strip letter/asterisk variant suffix so alt-art ("201a") and signature ("200*")
-        // resolve to the base card in the Riftcodex index ("201", "200")
-        const lookupNum = collectorNum?.replace(/[a-z*]+$/i, '');
-        this.#setQueueItemStatus(i, 'looking-up', `Looking up ${setCode}-${lookupNum}…`);
-        const match = lookupByCardCode(setCode, lookupNum ?? '');
-        if (!match) {
-          this.#setQueueItemStatus(i, 'not-found', `${setCode}-${lookupNum} not in Riftcodex`);
+        // Step 2 — Catalog-first lookup (DB → index → API) + upsert to catalog
+        const numericCollector = parseInt(collectorNum.match(/\d+/)?.[0] ?? '0', 10);
+        const cardVariant      = variantFromCardCode(cardNumber ?? collectorNum);
+        this.#setQueueItemStatus(i, 'looking-up', `Looking up ${setCode}-${collectorNum}…`);
+        const catalogResult = await lookupOrFetch(
+          setCode, numericCollector, cardVariant,
+          this.#makeCatalogFetchFn(cardVariant),
+        );
+        if (!catalogResult) {
+          this.#setQueueItemStatus(i, 'not-found', `${setCode}-${numericCollector} not in Riftcodex`);
           continue;
         }
 
-        const f = variant === 'signature'
-          ? { ...match.fields, name: match.fields.name.replace(/\(Overnumbered\)$/i, '(Signature)') }
-          : match.fields;
-
-        const matchedRarity = this.#rarities.find(r => r.name.toLowerCase() === f.rarityName?.toLowerCase());
-        console.debug('[Bulk rarity]', { collectorNum, variant, rarityName: f.rarityName, matched: matchedRarity?.name });
-        if (!matchedRarity && f.rarityName) console.warn(`[Bulk import] Unknown rarity "${f.rarityName}" — defaulting to first`);
+        const { catalogId, entry } = catalogResult;
+        const matchedRarity = this.#rarities.find(r => r.name.toLowerCase() === entry.rarity_name?.toLowerCase());
+        if (!matchedRarity && entry.rarity_name) console.warn(`[Bulk import] Unknown rarity "${entry.rarity_name}" — defaulting to first`);
         const rarityId = matchedRarity?.id ?? this.#rarities[0]?.id;
         const setId = this.#sets.find(s => {
-          const sn = f.setName?.toLowerCase() ?? '';
+          const sn = entry.set_name?.toLowerCase() ?? '';
           return sn.length > 0 && (s.name.toLowerCase().includes(sn) || sn.includes(s.name.toLowerCase()));
         })?.id ?? this.#sets[0]?.id;
 
@@ -899,30 +826,20 @@ export class AdminPageComponent extends Component {
 
         // Step 4 — DB insert
         const { error } = await getSupabaseClient().from('cards').insert([{
-          name:              f.name,
-          type:              (f.type ?? 'Spell') as CardType,
-          rarity_id:         rarityId,
-          set_id:            setId,
-          card_set_code:     setCode,
-          card_code:         cardNumber ?? collectorNum,
-          price:             0,
-          attack:            f.attack      ?? 0,
-          defense:           f.defense     ?? 0,
-          description:       f.description ?? '',
-          art_gradient:      'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
-          art_url:           userArtUrl,
-          riftcodex_art_url: f.imageUrl ?? null,
-          energy:            f.energy      ?? 0,
-          supertype:         f.supertype   ?? null,
-          domains:           f.domains     ?? [],
-          flavour:           f.flavour     ?? null,
-          artist:            f.artist      ?? null,
+          rarity_id:     rarityId,
+          set_id:        setId,
+          catalog_id:    catalogId,
+          card_set_code: setCode,
+          card_code:     cardNumber ?? collectorNum,
+          price:         0,
+          art_gradient:  'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
+          art_url:       userArtUrl,
         }]);
 
         if (error) {
           this.#setQueueItemStatus(i, 'error', error.message);
         } else {
-          this.#setQueueItemStatus(i, 'added', `Added: ${esc(f.name)}`);
+          this.#setQueueItemStatus(i, 'added', `Added: ${esc(entry.name)}`);
           added++;
         }
       }
@@ -1003,25 +920,26 @@ export class AdminPageComponent extends Component {
         if (fCardCode) fCardCode.value = cardNumber ?? collectorNum;
       }
 
-      // ── Step 2: Guaranteed card-code lookup from pre-fetched index ─────────
+      // ── Step 2: Catalog-first lookup (DB → index → API) ──────────────────
       if (setCode && collectorNum) {
         if (!isIndexReady()) {
           statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Fetching card index…';
           await buildCardIndex();
         }
 
-        // Strip variant suffix so alt-art/signature resolve to the base card in index
-        const lookupNum = collectorNum.replace(/[a-z*]+$/i, '');
-        const match = lookupByCardCode(setCode, lookupNum);
-        if (match) {
-          const fields = variant === 'signature'
-            ? { ...match.fields, name: match.fields.name.replace(/\(Overnumbered\)$/i, '(Signature)') }
-            : match.fields;
-          this.#applyRiftcodexFields(fields);
+        const numericCollector = parseInt(collectorNum.match(/\d+/)?.[0] ?? '0', 10);
+        const cardVariant      = variantFromCardCode(cardNumber ?? collectorNum);
+        const result = await lookupOrFetch(
+          setCode, numericCollector, cardVariant,
+          this.#makeCatalogFetchFn(cardVariant),
+        );
+        if (result) {
+          const fields = this.#entryToFields(result.entry);
+          this.#applyRiftcodexFields(fields, result.catalogId);
           statusEl.className = 'scan-status scan-status--success';
           statusEl.innerHTML =
             `<span class="scan-status__icon">✓</span>` +
-            `<span>Found: <strong>${esc(fields.name)}</strong> · ${esc(setCode)} ${esc(collectorNum)}</span>` +
+            `<span>Found: <strong>${esc(fields.name ?? '')}</strong> · ${esc(setCode)} ${esc(collectorNum)}</span>` +
             `<span class="scan-status__badge">card code</span>`;
           return;
         }
@@ -1055,11 +973,11 @@ export class AdminPageComponent extends Component {
     const raw      = input.value.trim().toUpperCase();
     if (!raw) return;
 
-    // Accept formats: SFD-051  SFD–051  SFD•051  SFD 051
-    const m = raw.match(/^([A-Z]{2,5})[^A-Z0-9]*(\d+)$/);
+    // Accept formats: SFD-051  SFD-R01a  SFD–051  SFD•051  SFD 051
+    const m = raw.match(/^([A-Z]{2,5})[^A-Z0-9]*([A-Z]?\d+[A-Z*]?)$/i);
     if (!m) {
       statusEl.className = 'scan-status scan-status--error';
-      statusEl.textContent = `Invalid format — use "SFD-051" (set code + collector number).`;
+      statusEl.textContent = `Invalid format — use "SFD-051" or "SFD-R01a" (set code + collector number).`;
       return;
     }
     const [, setCode, collectorNum] = m;
@@ -1073,13 +991,18 @@ export class AdminPageComponent extends Component {
         await buildCardIndex();
       }
 
-      const match = lookupByCardCode(setCode, collectorNum);
-      if (match) {
-        this.#applyRiftcodexFields(match.fields);
+      const numericCollector = parseInt(collectorNum.match(/\d+/)?.[0] ?? '0', 10);
+      const result = await lookupOrFetch(
+        setCode, numericCollector, 'standard',
+        this.#makeCatalogFetchFn('standard'),
+      );
+      if (result) {
+        const fields = this.#entryToFields(result.entry);
+        this.#applyRiftcodexFields(fields, result.catalogId);
         statusEl.className = 'scan-status scan-status--success';
         statusEl.innerHTML =
           `<span class="scan-status__icon">✓</span>` +
-          `<span>Found: <strong>${esc(match.fields.name)}</strong> · ${esc(setCode)} ${esc(collectorNum)}</span>` +
+          `<span>Found: <strong>${esc(fields.name ?? '')}</strong> · ${esc(setCode)} ${esc(collectorNum)}</span>` +
           `<span class="scan-status__badge">card code</span>`;
       } else {
         statusEl.className = 'scan-status scan-status--error';
@@ -1120,14 +1043,10 @@ export class AdminPageComponent extends Component {
     }
   }
 
-  #applyRiftcodexFields(fields: RiftcodexFields): void {
-    this.#lastRiftcodexMatch = fields;
-    if (fields.name)        (document.getElementById('fName')    as HTMLInputElement).value    = fields.name;
-    if (fields.type)        (document.getElementById('fType')    as HTMLSelectElement).value   = fields.type;
-    if (fields.description) (document.getElementById('fDesc')    as HTMLTextAreaElement).value = fields.description;
-    // Price is not sourced from Riftcodex — admin must set it manually
-    if (fields.attack    != null) (document.getElementById('fAttack')  as HTMLInputElement).value = String(fields.attack);
-    if (fields.defense   != null) (document.getElementById('fDefense') as HTMLInputElement).value = String(fields.defense);
+  #applyRiftcodexFields(fields: RiftcodexFields, catalogId?: string): void {
+    if (catalogId) (document.getElementById('fCatalogId') as HTMLInputElement).value = catalogId;
+    if (fields.name) (document.getElementById('fName') as HTMLInputElement).value = fields.name;
+    if (fields.type) (document.getElementById('fType') as HTMLInputElement).value = fields.type;
 
     // Match rarity by name (case-insensitive)
     if (fields.rarityName) {
@@ -1138,28 +1057,17 @@ export class AdminPageComponent extends Component {
 
     // Match set: accept partial overlap in either direction
     if (fields.setName) {
-      const sn  = fields.setName.toLowerCase();
-      const s   = this.#sets.find(
+      const sn = fields.setName.toLowerCase();
+      const s  = this.#sets.find(
         x => x.name.toLowerCase().includes(sn) || sn.includes(x.name.toLowerCase()),
       );
       if (s) (document.getElementById('fSet') as HTMLSelectElement).value = String(s.id);
     }
 
-    // Store Riftcodex CDN URL separately — preserves user-uploaded scan in fArtUrl
+    // Show Riftcodex art as preview if no user upload is present yet
     if (fields.imageUrl) {
-      (document.getElementById('fRiftcodexArtUrl') as HTMLInputElement).value = fields.imageUrl;
-      // Only show Riftcodex art as preview if no user upload is present yet
       const artUrl = (document.getElementById('fArtUrl') as HTMLInputElement).value.trim();
       if (!artUrl) this.#updateArtPreview(fields.imageUrl);
-    }
-
-    // Check tag checkboxes whose label text matches any returned tag name
-    if (fields.tags.length > 0) {
-      const apiTagsLower = fields.tags.map(t => t.toLowerCase());
-      document.querySelectorAll<HTMLInputElement>('#tagsCheckboxes input[type="checkbox"]').forEach(cb => {
-        const label = cb.closest('label')?.querySelector('span')?.textContent?.toLowerCase() ?? '';
-        cb.checked  = apiTagsLower.some(t => label.includes(t) || t.includes(label));
-      });
     }
   }
 
@@ -1168,5 +1076,58 @@ export class AdminPageComponent extends Component {
     const img  = document.getElementById('artPreview') as HTMLImageElement;
     if (url) { img.src = url; wrap.classList.remove('hidden'); }
     else { wrap.classList.add('hidden'); }
+  }
+
+  // Convert a CatalogEntry to the RiftcodexFields shape used by #applyRiftcodexFields
+  #entryToFields(entry: CatalogEntryInput): RiftcodexFields {
+    return {
+      name:        entry.name,
+      type:        entry.type        ?? undefined,
+      rarityName:  entry.rarity_name ?? undefined,
+      setName:     entry.set_name    ?? undefined,
+      attack:      entry.attack,
+      defense:     entry.defense,
+      description: entry.description,
+      imageUrl:    entry.image_url   ?? undefined,
+      tags:        [],
+      energy:      entry.energy,
+      supertype:   entry.supertype   ?? undefined,
+      domains:     entry.domains,
+      flavour:     entry.flavour     ?? undefined,
+      artist:      entry.artist      ?? undefined,
+    };
+  }
+
+  // Returns the fetchFn expected by lookupOrFetch — uses in-memory index or API
+  #makeCatalogFetchFn(variant: CardVariant): (sc: string, cn: number) => Promise<{ entry: CatalogEntryInput; tags: string[] } | null> {
+    return async (setCode, collectorNum) => {
+      if (!isIndexReady()) await buildCardIndex();
+      const match = lookupByCardCode(setCode, collectorNum);
+      if (!match) return null;
+      const fields = variant === 'signature'
+        ? { ...match.fields, name: match.fields.name.replace(/\(Overnumbered\)$/i, '(Signature)') }
+        : match.fields;
+      return {
+        entry: {
+          set_code:      setCode,
+          collector_num: collectorNum,
+          variant,
+          name:          fields.name          ?? '',
+          type:          fields.type          ?? null,
+          rarity_name:   fields.rarityName    ?? null,
+          set_name:      fields.setName       ?? null,
+          energy:        fields.energy        ?? 0,
+          supertype:     fields.supertype     ?? null,
+          attack:        fields.attack        ?? 0,
+          defense:       fields.defense       ?? 0,
+          description:   fields.description   ?? '',
+          flavour:       fields.flavour       ?? null,
+          artist:        fields.artist        ?? null,
+          domains:       fields.domains       ?? [],
+          image_url:     fields.imageUrl      ?? null,
+        },
+        tags: fields.tags ?? [],
+      };
+    };
   }
 }

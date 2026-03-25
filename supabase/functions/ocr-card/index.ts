@@ -92,10 +92,12 @@ serve(async (req) => {
                 type: 'text',
                 text:
                   'This is a Riftbound trading card. Find the card code printed at the bottom — ' +
-                  'it looks like "SFD • 170/221" (set code, bullet or dash, collector number / total). ' +
+                  'it looks like "SFD • 059/221" (set code, bullet or dash, collector number / total). ' +
+                  'Some cards are rune cards with a letter prefix on the number, e.g. "SFD • R01a/100". ' +
                   'Variants: alt-art cards use a letter suffix like "SFD • 000a/100"; ' +
                   'signature overnumber cards use an asterisk suffix like "SFD • 200*/199". ' +
-                  'Preserve any letter or asterisk suffix exactly as printed. ' +
+                  'Copy the collector number EXACTLY as printed — preserve leading zeros (e.g. "059" not "59") ' +
+                  'and any letter prefix or suffix. ' +
                   'Reply with ONLY the card code, nothing else. If you cannot find it, reply "not found".',
               },
             ],

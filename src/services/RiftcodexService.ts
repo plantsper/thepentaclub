@@ -96,11 +96,62 @@ function indexKey(setCode: string, collectorNum: number | string): string {
 }
 
 /**
- * Pre-fetch all cards and build an in-memory lookup index.
+ * Populate the in-memory index from DB catalog entries (fast path).
+ * Called by CatalogService.warmIndexFromCatalog — keeps DB logic out of this file.
+ * Standard variants are preferred when multiple variants share the same key.
+ */
+export function setIndexFromCatalog(entries: Array<{
+  set_code:      string;
+  collector_num: number;
+  variant:       string;
+  name:          string;
+  type:          string | null;
+  rarity_name:   string | null;
+  set_name:      string | null;
+  energy:        number;
+  supertype:     string | null;
+  attack:        number;
+  defense:       number;
+  description:   string;
+  flavour:       string | null;
+  artist:        string | null;
+  domains:       string[];
+  image_url:     string | null;
+}>): void {
+  // Sort: 'standard' first so it wins on key collision
+  const sorted = [...entries].sort((a, b) => {
+    if (a.variant === 'standard' && b.variant !== 'standard') return -1;
+    if (b.variant === 'standard' && a.variant !== 'standard') return  1;
+    return 0;
+  });
+
+  _index = new Map(
+    sorted.map(e => [
+      indexKey(e.set_code, e.collector_num),
+      {
+        id:               `${e.set_code.toUpperCase()}:${e.collector_num}`,
+        name:             e.name,
+        collector_number: e.collector_num,
+        attributes: { energy: e.energy, might: e.attack,    power: e.defense },
+        classification: {
+          type:      e.type      ?? '',
+          rarity:    e.rarity_name ?? '',
+          supertype: e.supertype ?? null,
+          domain:    e.domains,
+        },
+        text: { rich: '', plain: e.description, flavour: e.flavour ?? null },
+        set:  { set_id: e.set_code.toUpperCase(), label: e.set_name ?? '' },
+        tags: [],
+        media: { image_url: e.image_url ?? null, artist: e.artist ?? null, accessibility_text: null },
+      } as RiftcodexCard,
+    ]),
+  );
+}
+
+/**
+ * Pre-fetch all cards from the Riftcodex API and build the in-memory index.
  * Safe to call multiple times — only fetches once per session.
- *
- * Call this early (e.g. when the admin form opens) so it's ready by the time
- * the user uploads a card image.
+ * Prefer warmIndexFromCatalog() first; fall back to this on a cold DB.
  */
 export async function buildCardIndex(): Promise<void> {
   if (_index) return;
