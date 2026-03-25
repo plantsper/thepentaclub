@@ -3,6 +3,7 @@ import { getSupabaseClient } from '../../services/supabaseClient';
 import type { CardType } from '../../types';
 import { esc } from '../../utils/esc';
 import { variantFromCardCode, variantLabel } from '../../utils/cardVariant';
+import { buildCardIndex, lookupByCardCode, fuzzySearchCard, isIndexReady } from '../../services/RiftcodexService';
 
 // Minimal shape used by #applyRiftcodexFields — mirrors RiftcodexMatch['fields']
 interface RiftcodexFields {
@@ -40,6 +41,7 @@ interface AdminCard {
   description: string;
   art_gradient: string;
   art_url: string | null;
+  riftcodex_art_url: string | null;
   card_set_code: string | null;
   card_code: string | null;
   card_rarities: { id: number; name: string };
@@ -201,6 +203,7 @@ export class AdminPageComponent extends Component {
                 <button type="button" class="admin-btn admin-btn--ghost admin-btn--sm" id="riftcodexSearchBtn">Search</button>
               </div>
               <input type="text" id="fArtUrl" placeholder="or paste public image URL" style="margin-top:8px">
+              <input type="hidden" id="fRiftcodexArtUrl">
               <div id="artPreviewWrap" class="art-preview hidden">
                 <img id="artPreview" src="" alt="Art preview">
               </div>
@@ -323,7 +326,7 @@ export class AdminPageComponent extends Component {
     });
 
     // Pre-fetch the Riftcodex card index in the background so lookups are instant when a card is uploaded
-    import('../../services/RiftcodexService').then(({ buildCardIndex }) => buildCardIndex()).catch(() => {});
+    buildCardIndex().catch(() => {});
 
     document.getElementById('tagForm')?.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -523,7 +526,8 @@ export class AdminPageComponent extends Component {
       (document.getElementById('fDefense')  as HTMLInputElement).value    = String(card.defense);
       (document.getElementById('fDesc')     as HTMLTextAreaElement).value = card.description;
       (document.getElementById('fGradient') as HTMLInputElement).value    = card.art_gradient;
-      (document.getElementById('fArtUrl')   as HTMLInputElement).value    = card.art_url ?? '';
+      (document.getElementById('fArtUrl')           as HTMLInputElement).value = card.art_url ?? '';
+      (document.getElementById('fRiftcodexArtUrl')  as HTMLInputElement).value = card.riftcodex_art_url ?? '';
       this.#updateArtPreview(card.art_url ?? '');
     } else {
       titleEl.textContent = 'Add Card';
@@ -538,8 +542,9 @@ export class AdminPageComponent extends Component {
       (document.getElementById('fDefense')  as HTMLInputElement).value    = '0';
       (document.getElementById('fDesc')     as HTMLTextAreaElement).value = '';
       (document.getElementById('fGradient') as HTMLInputElement).value    = 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)';
-      (document.getElementById('fArtUrl')   as HTMLInputElement).value    = '';
-      (document.getElementById('fArtFile')  as HTMLInputElement).value    = '';
+      (document.getElementById('fArtUrl')          as HTMLInputElement).value = '';
+      (document.getElementById('fRiftcodexArtUrl') as HTMLInputElement).value = '';
+      (document.getElementById('fArtFile')         as HTMLInputElement).value = '';
       this.#updateArtPreview('');
     }
 
@@ -595,7 +600,8 @@ export class AdminPageComponent extends Component {
       description: this.#el<HTMLTextAreaElement>('fDesc').value.trim(),
       art_gradient: this.#el<HTMLInputElement>('fGradient').value.trim()
                    || 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
-      art_url:     this.#el<HTMLInputElement>('fArtUrl').value.trim() || null,
+      art_url:           this.#el<HTMLInputElement>('fArtUrl').value.trim() || null,
+      riftcodex_art_url: this.#el<HTMLInputElement>('fRiftcodexArtUrl').value.trim() || null,
       energy:      riftMatch?.energy    ?? 0,
       supertype:   riftMatch?.supertype ?? null,
       domains:     riftMatch?.domains   ?? [],
@@ -800,7 +806,7 @@ export class AdminPageComponent extends Component {
     });
   }
 
-  #setQueueItemStatus(index: number, state: 'scanning' | 'looking-up' | 'added' | 'not-found' | 'error', text: string): void {
+  #setQueueItemStatus(index: number, state: 'scanning' | 'looking-up' | 'uploading' | 'added' | 'not-found' | 'error', text: string): void {
     const span = document.querySelector<HTMLElement>(`[data-bulk-index="${index}"] .bulk-queue-item__status`);
     if (!span) return;
     span.className = `bulk-queue-item__status bulk-queue-status--${state}`;
@@ -819,8 +825,6 @@ export class AdminPageComponent extends Component {
     document.querySelectorAll<HTMLButtonElement>('.bulk-queue-item__remove').forEach(b => { b.disabled = true; });
 
     try {
-      const { buildCardIndex, isIndexReady, lookupByCardCode } =
-        await import('../../services/RiftcodexService');
       const { extractCardCode } = await import('../../services/CardOcrService');
 
       if (!isIndexReady()) {
@@ -870,10 +874,9 @@ export class AdminPageComponent extends Component {
           continue;
         }
 
-        // Override rarity for overnumbered/signature variants — Riftcodex returns the
-        // base card rarity, but the physical card's rarity is "Overnumbered"
-        const f = { ...match.fields };
-        if (variant === 'overnumber' || variant === 'signature') f.rarityName = 'Showcase';
+        const f = variant === 'signature'
+          ? { ...match.fields, name: match.fields.name.replace(/\(Overnumbered\)$/i, '(Signature)') }
+          : match.fields;
 
         const matchedRarity = this.#rarities.find(r => r.name.toLowerCase() === f.rarityName?.toLowerCase());
         console.debug('[Bulk rarity]', { collectorNum, variant, rarityName: f.rarityName, matched: matchedRarity?.name });
@@ -889,25 +892,31 @@ export class AdminPageComponent extends Component {
           continue;
         }
 
-        // Step 3 — DB insert
+        // Step 3 — Upload scan to storage (best-effort; non-fatal if it fails)
+        this.#setQueueItemStatus(i, 'uploading', 'Uploading scan…');
+        let userArtUrl: string | null = null;
+        try { userArtUrl = await this.#uploadToStorage(file); } catch { /* non-fatal */ }
+
+        // Step 4 — DB insert
         const { error } = await getSupabaseClient().from('cards').insert([{
-          name:          f.name,
-          type:          (f.type ?? 'Spell') as CardType,
-          rarity_id:     rarityId,
-          set_id:        setId,
-          card_set_code: setCode,
-          card_code:     cardNumber ?? collectorNum,
-          price:         0,
-          attack:        f.attack      ?? 0,
-          defense:       f.defense     ?? 0,
-          description:   f.description ?? '',
-          art_gradient:  'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
-          art_url:       f.imageUrl    ?? null,
-          energy:        f.energy      ?? 0,
-          supertype:     f.supertype   ?? null,
-          domains:       f.domains     ?? [],
-          flavour:       f.flavour     ?? null,
-          artist:        f.artist      ?? null,
+          name:              f.name,
+          type:              (f.type ?? 'Spell') as CardType,
+          rarity_id:         rarityId,
+          set_id:            setId,
+          card_set_code:     setCode,
+          card_code:         cardNumber ?? collectorNum,
+          price:             0,
+          attack:            f.attack      ?? 0,
+          defense:           f.defense     ?? 0,
+          description:       f.description ?? '',
+          art_gradient:      'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
+          art_url:           userArtUrl,
+          riftcodex_art_url: f.imageUrl ?? null,
+          energy:            f.energy      ?? 0,
+          supertype:         f.supertype   ?? null,
+          domains:           f.domains     ?? [],
+          flavour:           f.flavour     ?? null,
+          artist:            f.artist      ?? null,
         }]);
 
         if (error) {
@@ -932,43 +941,35 @@ export class AdminPageComponent extends Component {
     }
   }
 
-  async #handleImageUpload(file: File): Promise<void> {
-    if (this.#uploadingArt) return;
-    const statusEl   = document.getElementById('uploadStatus')!;
-    const artUrlInput = document.getElementById('fArtUrl') as HTMLInputElement;
-
+  async #uploadToStorage(file: File): Promise<string> {
     const ALLOWED_MIME: Record<string, string> = {
       'image/jpeg': 'jpg',
       'image/png':  'png',
       'image/webp': 'webp',
     };
     const ext = ALLOWED_MIME[file.type];
-    if (!ext) {
-      statusEl.textContent = 'Unsupported file type (JPEG, PNG, or WebP only).';
-      statusEl.classList.remove('hidden');
-      return;
-    }
+    if (!ext) throw new Error('Unsupported file type (JPEG, PNG, or WebP only)');
+    if (file.size > 5 * 1024 * 1024) throw new Error('File too large (max 5 MB)');
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await getSupabaseClient()
+      .storage.from('card-art').upload(path, file, { upsert: false });
+    if (error) throw error;
+    return getSupabaseClient().storage.from('card-art').getPublicUrl(path).data.publicUrl;
+  }
 
-    if (file.size > 5 * 1024 * 1024) {
-      statusEl.textContent = 'File too large (max 5 MB).';
-      statusEl.classList.remove('hidden');
-      return;
-    }
+  async #handleImageUpload(file: File): Promise<void> {
+    if (this.#uploadingArt) return;
+    const statusEl   = document.getElementById('uploadStatus')!;
+    const artUrlInput = document.getElementById('fArtUrl') as HTMLInputElement;
 
     this.#uploadingArt = true;
     statusEl.textContent = 'Uploading…';
     statusEl.classList.remove('hidden');
 
     try {
-      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-      const { error: uploadError } = await getSupabaseClient()
-        .storage.from('card-art').upload(path, file, { upsert: false });
-      if (uploadError) throw uploadError;
-
-      const { data } = getSupabaseClient().storage.from('card-art').getPublicUrl(path);
-      artUrlInput.value = data.publicUrl;
-      this.#updateArtPreview(data.publicUrl);
+      const publicUrl = await this.#uploadToStorage(file);
+      artUrlInput.value = publicUrl;
+      this.#updateArtPreview(publicUrl);
       statusEl.textContent = 'Upload complete.';
     } catch (err: unknown) {
       statusEl.textContent = err instanceof Error ? err.message : 'Upload failed';
@@ -1002,8 +1003,6 @@ export class AdminPageComponent extends Component {
         if (fCardCode) fCardCode.value = cardNumber ?? collectorNum;
       }
 
-      const { lookupByCardCode, buildCardIndex, isIndexReady } = await import('../../services/RiftcodexService');
-
       // ── Step 2: Guaranteed card-code lookup from pre-fetched index ─────────
       if (setCode && collectorNum) {
         if (!isIndexReady()) {
@@ -1015,15 +1014,14 @@ export class AdminPageComponent extends Component {
         const lookupNum = collectorNum.replace(/[a-z*]+$/i, '');
         const match = lookupByCardCode(setCode, lookupNum);
         if (match) {
-          // Override rarity for overnumbered/signature variants
-          const fields = { ...match.fields };
-          if (variant === 'overnumber' || variant === 'signature') fields.rarityName = 'Overnumbered';
-          console.debug('[CardScan rarity]', { collectorNum, variant, rarityName: fields.rarityName });
+          const fields = variant === 'signature'
+            ? { ...match.fields, name: match.fields.name.replace(/\(Overnumbered\)$/i, '(Signature)') }
+            : match.fields;
           this.#applyRiftcodexFields(fields);
           statusEl.className = 'scan-status scan-status--success';
           statusEl.innerHTML =
             `<span class="scan-status__icon">✓</span>` +
-            `<span>Found: <strong>${esc(match.fields.name)}</strong> · ${esc(setCode)} ${esc(collectorNum)}</span>` +
+            `<span>Found: <strong>${esc(fields.name)}</strong> · ${esc(setCode)} ${esc(collectorNum)}</span>` +
             `<span class="scan-status__badge">card code</span>`;
           return;
         }
@@ -1070,8 +1068,6 @@ export class AdminPageComponent extends Component {
     statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Looking up card…';
 
     try {
-      const { lookupByCardCode, buildCardIndex, isIndexReady } = await import('../../services/RiftcodexService');
-
       if (!isIndexReady()) {
         statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Fetching card index…';
         await buildCardIndex();
@@ -1105,7 +1101,6 @@ export class AdminPageComponent extends Component {
     statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Searching Riftcodex…';
 
     try {
-      const { fuzzySearchCard } = await import('../../services/RiftcodexService');
       const match = await fuzzySearchCard(query);
 
       if (match) {
@@ -1150,10 +1145,12 @@ export class AdminPageComponent extends Component {
       if (s) (document.getElementById('fSet') as HTMLSelectElement).value = String(s.id);
     }
 
-    // Auto-fill art URL from Riftcodex CDN (skips manual upload for official cards)
+    // Store Riftcodex CDN URL separately — preserves user-uploaded scan in fArtUrl
     if (fields.imageUrl) {
-      (document.getElementById('fArtUrl') as HTMLInputElement).value = fields.imageUrl;
-      this.#updateArtPreview(fields.imageUrl);
+      (document.getElementById('fRiftcodexArtUrl') as HTMLInputElement).value = fields.imageUrl;
+      // Only show Riftcodex art as preview if no user upload is present yet
+      const artUrl = (document.getElementById('fArtUrl') as HTMLInputElement).value.trim();
+      if (!artUrl) this.#updateArtPreview(fields.imageUrl);
     }
 
     // Check tag checkboxes whose label text matches any returned tag name

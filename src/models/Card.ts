@@ -22,7 +22,8 @@ export class Card implements ICard {
     public readonly supertype?: string,
     public readonly domains: string[] = [],
     public readonly flavour?: string,
-    public readonly artist?: string
+    public readonly artist?: string,
+    public readonly riftcodexArtUrl?: string
   ) {}
 
   get rarityClass(): string {

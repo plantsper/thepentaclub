@@ -42,6 +42,7 @@ interface CardRow {
   domains: string[];
   flavour: string | null;
   artist: string | null;
+  riftcodex_art_url: string | null;
   card_rarities: RarityRow;
   card_sets: SetRow;
   card_tags: CardTagRow[];
@@ -89,6 +90,7 @@ export async function fetchCards(): Promise<ICard[]> {
     row.supertype ?? undefined,
     row.domains ?? [],
     row.flavour ?? undefined,
-    row.artist ?? undefined
+    row.artist ?? undefined,
+    row.riftcodex_art_url ?? undefined
   ));
 }

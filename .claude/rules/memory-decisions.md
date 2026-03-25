@@ -57,8 +57,8 @@ Migration 004 seeded placeholder names (`Legendary`) that don't exist in Riftbou
 **Variant suffix must be stripped before Riftcodex index lookup**
 Alt-art collectorNum `"201a"` → `Number("201a")` = NaN → key `"SFD:NaN"` → no match. Always strip `[a-z*]+$` from collectorNum before calling `lookupByCardCode`. The stripped number finds the base card; variant is applied after.
 
-**Overnumber/signature cards use "Showcase" rarity, not Riftcodex base rarity**
-Riftcodex returns the base card's rarity (e.g. "Rare") even for showcase variants. After lookup, if `variant === 'overnumber' || variant === 'signature'`, override `rarityName` to `'Showcase'` before the DB rarity lookup.
+**Riftcodex already returns "Showcase" rarity for overnumber/signature cards — do not override**
+Confirmed by live API: both the `(Overnumbered)` and `(Signature)` Riftcodex entries for a given collector number return `classification.rarity = "Showcase"` directly. Do not manually override `rarityName` after lookup — it was redundant and has been removed from both scan paths.
 
 **Variant is derived from card_code, not stored**
 `card_code` already encodes the variant (`"220/219"` = overnumber, `"000a/100"` = alt-art, `"200[*]/199"` = signature). `variantFromCardCode()` in `src/utils/cardVariant.ts` derives it at runtime. No DB column needed — do not suggest adding one unless querying/filtering by variant is required.
@@ -81,3 +81,22 @@ Was next to the name (collector metadata ≠ primary identity). Now right-aligne
 
 **`.tcg-card__rarity` CSS classes removed**
 All rarity badge CSS (`--legendary`, `--epic`, `--rare`, `--common`, `--uncommon`, `--showcase`, `--promo`, `--ultimate`) deleted. The art badge was deprecated; these were orphaned. If rarity badges are ever needed again, re-add the CSS — do not assume it exists.
+
+---
+
+## 2026-03-24 (Riftcodex metadata + UI session)
+
+**Migration 009 — five new columns on `cards`**
+`energy INTEGER DEFAULT 0`, `supertype TEXT`, `artist TEXT`, `flavour TEXT`, `domains TEXT[] DEFAULT '{}'`. All sourced from Riftcodex: `attributes.energy`, `classification.supertype`, `media.artist`, `text.flavour`, `classification.domain[]`. Auto-populated on scan/import; no admin form fields needed.
+
+**Domain colors are hardcoded in `src/utils/domainColors.ts`, never from DB**
+`domainColor(name)` returns a CSS hex from a trusted local map (Fury→orange, Chaos→purple, etc.). Inline `style=` uses these values directly. Never use DB-sourced strings as CSS color values.
+
+**Supertype badge suppressed when it matches card type**
+`classification.supertype` often returns "Champion" for Champion cards — redundant with the type badge. Condition: `card.supertype && card.supertype.toLowerCase() !== card.type.toLowerCase()` before rendering the amber supertype badge.
+
+**Overnumber and Signature share the same Riftcodex index key**
+Both variants for a given collector number (e.g. `OGN:309`) exist in the API with distinct names (`(Overnumbered)` vs `(Signature)`), but the in-memory Map only stores one. After lookup, if `variant === 'signature'`, patch the name: `.replace(/\(Overnumbered\)$/i, '(Signature)')`. This is safe — both entries carry `rarity: "Showcase"`.
+
+**RiftcodexService must be statically imported in AdminPageComponent**
+Was dynamically imported (`import('...')`) causing "Failed to fetch dynamically imported module" on Vercel after each deploy (chunk hash changes, cached HTML references old hash). All four dynamic import calls replaced with a single static import at the top of the file. `buildCardIndex`, `lookupByCardCode`, `fuzzySearchCard`, `isIndexReady` are now module-level imports.

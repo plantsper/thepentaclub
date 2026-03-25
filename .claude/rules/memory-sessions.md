@@ -6,6 +6,37 @@ Rolling summary — most recent first. Keep last 5 sessions; archive older ones.
 
 ## 2026-03-24 (latest)
 
+**Riftcodex metadata + card UI enrichment**
+
+**Migration 009**
+- Added 5 columns to `cards`: `energy INTEGER`, `supertype TEXT`, `artist TEXT`, `flavour TEXT`, `domains TEXT[]`
+- All auto-populated from Riftcodex on scan/import; no manual form fields
+
+**New utility**
+- `src/utils/domainColors.ts` — hardcoded domain → hex color map; `domainColor(name)` used by lightbox + card grid
+
+**Lightbox body redesign**
+- Domain chips row: colored pills per domain using `domainColor()` inline style
+- Tag chips row: gray pills from `card.tags`
+- Supertype badge (amber) — suppressed when `supertype === type` (e.g. "Champion" on Champion cards)
+- "CARD EFFECT" label above description
+- Flavour text (italic, muted) below description
+- Artist attribution line
+
+**Card grid domain chips**
+- `.tcg-card__domains` row between type line and footer; up to 3 chips; conditional (hidden when empty)
+
+**Bug fixes**
+- `RiftcodexService` converted from dynamic `import()` to static import — fixes "Failed to fetch dynamically imported module" error on Vercel after deploys (stale chunk hash)
+- Removed manual `rarityName = 'Showcase'` override — Riftcodex already returns "Showcase" for overnumber/signature entries directly
+- Signature name patch: after index lookup, if `variant === 'signature'`, replace `(Overnumbered)` → `(Signature)` in matched name (both share `SET:NUM` index key, only one entry survives the Map)
+- Supertype "Champion" redundancy fixed — suppressed when it matches `card.type`
+- Single-scan path had `rarityName = 'Overnumbered'` (old name); corrected to `'Showcase'` (then removed entirely per above)
+
+---
+
+## 2026-03-24 (previous)
+
 **Card UI cleanup — stats removal, lightbox redesign, layout fix**
 
 **Stats deprecated**
@@ -94,11 +125,6 @@ Rolling summary — most recent first. Keep last 5 sessions; archive older ones.
 - Docs updated: `infrastructure.md` and `PROJECT_OVERVIEW.md` reflect schema, OCR, and variant patterns
 - CLAUDE.md + `.claude/rules/` memory architecture set up
 
-**Pending deploy steps (not yet done):**
-1. Run migration 006 in Supabase Studio SQL Editor
-2. `supabase functions deploy ocr-card --no-verify-jwt` (for the prior CORS fix)
-3. `npm run build && vercel --prod`
-
 ---
 
 ## 2026-03-24 (earlier)
@@ -111,22 +137,3 @@ Rolling summary — most recent first. Keep last 5 sessions; archive older ones.
 - CORS fix: `ALLOWED_ORIGIN` secret had trailing slash; edge function now strips it with `.replace(/\/$/, '')`
 - Diagnosed "cards not showing" bug: `App.ts` catch-all swallows `fetchCards()` errors and falls back to sample data — root cause is migration 005 not yet run on production
 
----
-
-## 2026-03-23
-
-**mana_cost → price refactor**
-- Migration 005: `ALTER TABLE cards RENAME COLUMN mana_cost TO price`, widen to `NUMERIC(10,2)`, reset to 0.00
-- Card badge: purple circle removed, replaced with green pill shape (`.tcg-card__price-tag`)
-- All types, model, service, components updated; PostgREST returns NUMERIC as string — wrapped in `Number()`
-- Admin form label: "Energy Cost" → "Price ($)", step 0.01
-- Riftcodex `manaCost` field intentionally NOT used for price — Riftcodex has no pricing data
-
-**Admin delete overhaul**
-- All `confirm()` dialogs removed
-- Inline row confirmation: `#promptDelete` / `#cancelPromptDelete` swap actions cell HTML
-- Bulk delete: checkbox column + "Delete selected" toolbar → banner with dedicated error span
-- `#executeBulkDelete` disables both buttons during operation to prevent double-click race
-
-**Bulk add (original — textarea, later replaced)**
-- Initial bulk add used a textarea for card codes; replaced same session with image drop zone

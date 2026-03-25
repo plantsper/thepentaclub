@@ -373,6 +373,7 @@
 .bulk-queue-status--pending    { color: var(--text-muted); }
 .bulk-queue-status--scanning   { color: var(--accent-secondary); }
 .bulk-queue-status--looking-up { color: var(--accent-secondary); }
+.bulk-queue-status--uploading  { color: var(--accent-secondary); }
 .bulk-queue-status--added      { color: var(--accent); }
 .bulk-queue-status--not-found  { color: #fbbf24; }
 .bulk-queue-status--error      { color: #f87171; }

@@ -41,6 +41,13 @@ export class CardLightboxComponent extends Component {
       if (e.key === 'Escape') this.#close();
     });
 
+    // Carousel dot navigation (event delegation — dots are rendered dynamically)
+    document.getElementById('lightboxArt')?.addEventListener('click', (e) => {
+      const dot = (e.target as HTMLElement).closest<HTMLElement>('.lightbox__dot');
+      if (!dot) return;
+      this.#goToSlide(Number(dot.dataset.slide));
+    });
+
     // Focus trap: keep Tab/Shift+Tab inside the dialog while open
     document.querySelector('.lightbox__dialog')?.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key !== 'Tab') return;
@@ -65,26 +72,67 @@ export class CardLightboxComponent extends Component {
     this.#events.on<ICard>('card:open', (card) => this.#open(card));
   }
 
+  #goToSlide(index: number): void {
+    document.querySelectorAll('.lightbox__slide').forEach((el, i) => {
+      el.classList.toggle('lightbox__slide--active', i === index);
+    });
+    document.querySelectorAll('.lightbox__dot').forEach((el, i) => {
+      el.classList.toggle('lightbox__dot--active', i === index);
+    });
+    // Sync blurred background on the art container
+    const activeSlide = document.querySelector<HTMLElement>('.lightbox__slide--active');
+    const artEl = document.getElementById('lightboxArt');
+    if (activeSlide && artEl) {
+      artEl.style.setProperty('--art-url', activeSlide.style.getPropertyValue('--art-url'));
+    }
+  }
+
   #open(card: ICard): void {
     const lightbox = document.getElementById('cardLightbox');
     const art = document.getElementById('lightboxArt');
     const body = document.getElementById('lightboxBody');
     if (!lightbox || !art || !body) return;
 
-    const artSrc = safeUrl(card.artUrl ?? '');
-    if (artSrc) {
-      art.style.background = '';
-      art.style.setProperty('--art-url', `url('${artSrc}')`);
-      art.innerHTML = `
-        <img class="lightbox__art-img" src="${artSrc}" alt="${esc(card.name)}">
-        <span class="lightbox__price">$${card.price.toFixed(2)}</span>
-      `;
+    // Build image list: user scan first, Riftcodex art second
+    const artImages: Array<{ src: string; label: string }> = [];
+    const userSrc = safeUrl(card.artUrl ?? '');
+    const rcSrc   = safeUrl(card.riftcodexArtUrl ?? '');
+    if (userSrc) artImages.push({ src: userSrc, label: 'Your Scan' });
+    if (rcSrc)   artImages.push({ src: rcSrc,   label: 'Official Art' });
+
+    const priceHtml = `<span class="lightbox__price">$${card.price.toFixed(2)}</span>`;
+    const fallbackGradient = card.artGradient;
+
+    const slidesHtml = artImages.length > 0
+      ? artImages.map((img, i) => `
+          <div class="lightbox__slide${i === 0 ? ' lightbox__slide--active' : ''}"
+               style="--art-url: url('${img.src}')">
+            <img class="lightbox__art-img" src="${img.src}" alt="${esc(card.name)}">
+            ${i === 0 ? priceHtml : ''}
+          </div>
+        `).join('')
+      : `<div class="lightbox__slide lightbox__slide--active"
+              style="background:${fallbackGradient}">
+           ${priceHtml}
+         </div>`;
+
+    const navHtml = artImages.length > 1
+      ? `<div class="lightbox__carousel-nav">
+           ${artImages.map((_, i) =>
+             `<button class="lightbox__dot${i === 0 ? ' lightbox__dot--active' : ''}"
+                      data-slide="${i}" aria-label="Image ${i + 1}"></button>`
+           ).join('')}
+         </div>`
+      : '';
+
+    art.innerHTML = `<div class="lightbox__carousel">${slidesHtml}${navHtml}</div>`;
+
+    // Sync blurred background to first slide
+    if (artImages.length > 0) {
+      art.style.setProperty('--art-url', `url('${artImages[0].src}')`);
     } else {
       art.style.removeProperty('--art-url');
-      art.style.background = card.artGradient;
-      art.innerHTML = `
-        <span class="lightbox__price">$${card.price.toFixed(2)}</span>
-      `;
+      art.style.background = fallbackGradient;
     }
 
     const rc = safeHex(card.rarity.colorHex);
@@ -102,7 +150,7 @@ export class CardLightboxComponent extends Component {
 
     const chipsRow = (domainChips || tagChips || card.supertype)
       ? `<div class="lightbox__chips">
-          ${card.supertype ? `<span class="lightbox__supertype-badge">${esc(card.supertype)}</span>` : ''}
+          ${card.supertype && card.supertype.toLowerCase() !== card.type.toLowerCase() ? `<span class="lightbox__supertype-badge">${esc(card.supertype)}</span>` : ''}
           ${domainChips}
           ${tagChips}
         </div>`

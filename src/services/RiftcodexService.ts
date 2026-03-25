@@ -211,6 +211,10 @@ export async function searchCards(query: string, size = 10): Promise<RiftcodexCa
 
 // ── Field mapping ─────────────────────────────────────────────────────────────
 
+function stripShortcodes(text: string): string {
+  return text.replace(/:[a-z0-9_]+:/gi, '').replace(/\s+/g, ' ').trim();
+}
+
 function mapFields(card: RiftcodexCard): Omit<RiftcodexMatch['fields'], 'setValidated'> {
   // Riftbound type → our DB CardType
   const typeRaw = (card.classification?.type ?? '').toLowerCase();
@@ -228,13 +232,13 @@ function mapFields(card: RiftcodexCard): Omit<RiftcodexMatch['fields'], 'setVali
     manaCost:    card.attributes?.energy         ?? undefined,
     attack:      card.attributes?.might          ?? undefined,
     defense:     card.attributes?.power          ?? undefined,
-    description: card.text?.plain                ?? undefined,
+    description: card.text?.plain   ? stripShortcodes(card.text.plain)   : undefined,
     imageUrl:    card.media?.image_url           ?? undefined,
     tags:        card.tags                       ?? [],
     energy:      card.attributes?.energy         ?? undefined,
     supertype:   card.classification?.supertype  ?? undefined,
     domains:     card.classification?.domain     ?? [],
-    flavour:     card.text?.flavour              ?? undefined,
+    flavour:     card.text?.flavour ? stripShortcodes(card.text.flavour) : undefined,
     artist:      card.media?.artist              ?? undefined,
   };
 }

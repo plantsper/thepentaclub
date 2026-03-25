@@ -48,6 +48,8 @@ export interface ICard {
   flavour?: string;
   /** Card artist credit (media.artist from Riftcodex) */
   artist?: string;
+  /** Official art CDN URL from Riftcodex (secondary image in carousel) */
+  riftcodexArtUrl?: string;
   readonly rarityClass: string;
   readonly variant: import('../utils/cardVariant').CardVariant;
 }
