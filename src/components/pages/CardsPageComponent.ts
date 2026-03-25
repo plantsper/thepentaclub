@@ -2,6 +2,7 @@ import { Component } from '../base/Component';
 import type { ICard, ICardCollection, IEventEmitter } from '../../types';
 import { esc, safeUrl, safeCss } from '../../utils/esc';
 import { variantLabel } from '../../utils/cardVariant';
+import { domainColor } from '../../utils/domainColors';
 
 export class CardsPageComponent extends Component {
   #collection: ICardCollection;
@@ -115,6 +116,7 @@ export class CardsPageComponent extends Component {
             ${card.cardSetCode ? `<span class="tcg-card__code">${esc(card.cardSetCode)}${card.cardCode ? ` ${esc(card.cardCode)}` : ''}</span>` : ''}
           </div>
           <div class="tcg-card__type">${esc(card.type)} &mdash; ${esc(card.set.name)}</div>
+          ${card.domains?.length ? `<div class="tcg-card__domains">${card.domains.slice(0, 3).map(d => { const c = domainColor(d); return `<span class="tcg-card__domain-chip" style="background:${c}18;border-color:${c}50;color:${c}">${esc(d)}</span>`; }).join('')}</div>` : ''}
           <div class="tcg-card__footer">
             <span class="tcg-card__rarity-dot" style="background:${esc(card.rarity.colorHex)}"></span>
             <span class="tcg-card__rarity-name">${esc(card.rarity.name)}</span>

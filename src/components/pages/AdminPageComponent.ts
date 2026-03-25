@@ -16,6 +16,11 @@ interface RiftcodexFields {
   description?: string;
   imageUrl?:    string;   // CDN URL from Riftcodex — skips manual art upload
   tags:         string[];
+  energy?:      number;
+  supertype?:   string;
+  domains:      string[];
+  flavour?:     string;
+  artist?:      string;
 }
 
 
@@ -51,6 +56,7 @@ export class AdminPageComponent extends Component {
   #uploadingArt             = false;
   #selectedIds: Set<string> = new Set();
   #bulkItems: { file: File; url: string }[] = [];
+  #lastRiftcodexMatch: RiftcodexFields | null = null;
 
   // Typed getElementById that throws if the element is missing — safer than `!` casts.
   #el<T extends HTMLElement>(id: string): T {
@@ -482,6 +488,7 @@ export class AdminPageComponent extends Component {
 
   #openForm(id: string | null): void {
     this.#editingId = id;
+    this.#lastRiftcodexMatch = null;
     const formEl  = document.getElementById('adminForm')!;
     const titleEl = document.getElementById('formTitle')!;
     document.getElementById('formError')?.classList.add('hidden');
@@ -574,6 +581,7 @@ export class AdminPageComponent extends Component {
       return;
     }
 
+    const riftMatch = this.#lastRiftcodexMatch;
     const payload = {
       name,
       type:          this.#el<HTMLSelectElement>('fType').value as CardType,
@@ -588,6 +596,11 @@ export class AdminPageComponent extends Component {
       art_gradient: this.#el<HTMLInputElement>('fGradient').value.trim()
                    || 'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
       art_url:     this.#el<HTMLInputElement>('fArtUrl').value.trim() || null,
+      energy:      riftMatch?.energy    ?? 0,
+      supertype:   riftMatch?.supertype ?? null,
+      domains:     riftMatch?.domains   ?? [],
+      flavour:     riftMatch?.flavour   ?? null,
+      artist:      riftMatch?.artist    ?? null,
     };
 
     const selectedTagIds = Array.from(
@@ -890,6 +903,11 @@ export class AdminPageComponent extends Component {
           description:   f.description ?? '',
           art_gradient:  'linear-gradient(135deg, #1e3350 0%, #0a1628 100%)',
           art_url:       f.imageUrl    ?? null,
+          energy:        f.energy      ?? 0,
+          supertype:     f.supertype   ?? null,
+          domains:       f.domains     ?? [],
+          flavour:       f.flavour     ?? null,
+          artist:        f.artist      ?? null,
         }]);
 
         if (error) {
@@ -1108,6 +1126,7 @@ export class AdminPageComponent extends Component {
   }
 
   #applyRiftcodexFields(fields: RiftcodexFields): void {
+    this.#lastRiftcodexMatch = fields;
     if (fields.name)        (document.getElementById('fName')    as HTMLInputElement).value    = fields.name;
     if (fields.type)        (document.getElementById('fType')    as HTMLSelectElement).value   = fields.type;
     if (fields.description) (document.getElementById('fDesc')    as HTMLTextAreaElement).value = fields.description;

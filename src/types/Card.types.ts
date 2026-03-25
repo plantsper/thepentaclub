@@ -38,6 +38,16 @@ export interface ICard {
   cardSetCode?: string;
   /** Collector number / total with variant suffix, e.g. '170/221', '000a/100', '200[*]/199' */
   cardCode?: string;
+  /** Game energy cost (attributes.energy from Riftcodex) */
+  energy: number;
+  /** Card supertype, e.g. 'Legend' — null for non-legend cards */
+  supertype?: string;
+  /** Domain/element classification array, e.g. ['Fury', 'Chaos'] */
+  domains: string[];
+  /** Flavour text (text.flavour from Riftcodex) */
+  flavour?: string;
+  /** Card artist credit (media.artist from Riftcodex) */
+  artist?: string;
   readonly rarityClass: string;
   readonly variant: import('../utils/cardVariant').CardVariant;
 }

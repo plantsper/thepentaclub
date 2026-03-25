@@ -17,7 +17,12 @@ export class Card implements ICard {
     public readonly tags: ITag[],
     public readonly artUrl?: string,
     public readonly cardSetCode?: string,
-    public readonly cardCode?: string
+    public readonly cardCode?: string,
+    public readonly energy: number = 0,
+    public readonly supertype?: string,
+    public readonly domains: string[] = [],
+    public readonly flavour?: string,
+    public readonly artist?: string
   ) {}
 
   get rarityClass(): string {

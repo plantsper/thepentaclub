@@ -6,6 +6,34 @@ Rolling summary — most recent first. Keep last 5 sessions; archive older ones.
 
 ## 2026-03-24 (latest)
 
+**Card UI cleanup — stats removal, lightbox redesign, layout fix**
+
+**Stats deprecated**
+- Power/Health row removed from card grid (`CardGridComponent`) and catalog (`CardsPageComponent`)
+- Lightbox stats section (Power, Health, Price boxes) removed entirely — price already shown as pill on art
+- Rarity badge removed from lightbox art — rarity bar in body is the single rarity display
+
+**Lightbox refinements**
+- Art column widened 260px → 300px; dialog `max-height` 88vh → 92vh — card renders larger with less blank blurred space
+- Card code moved from name row to rarity bar (right-aligned): `● Rare   SFD 020/221`
+- Removed redundant set name from rarity bar (already shown as the top `.lightbox__set` label)
+- `margin-left: auto` on card code moved from inline style to CSS: `.lightbox__rarity-bar .lightbox__card-code`
+- Removed redundant `margin-top: auto` on `.lightbox__rarity-bar` (`.lightbox__desc { flex: 1 }` already pins it)
+
+**Card grid layout fix**
+- `.tcg-card` made a flex column — enables info section to fill remaining height
+- `.tcg-card__art` switched from `height: 58%` to `aspect-ratio: 3/2.8; flex-shrink: 0` — fixed art proportion regardless of card size
+- `.tcg-card__info` made `display: flex; flex-direction: column; flex: 1` — stretches to fill remaining card height
+- `.tcg-card__type` given `flex: 1` — absorbs slack so footer always pins to bottom; margin-based spacing removed
+- `aspect-ratio: 3/4.7` → `3/4.3` — reduced since stats row is gone
+
+**CSS dead code removed**
+- `.tcg-card__rarity` base class + all 8 modifier classes (`--legendary`, `--epic`, `--rare`, `--common`, `--uncommon`, `--showcase`, `--promo`, `--ultimate`) deleted — art badge was removed, these were orphaned
+
+---
+
+## 2026-03-24 (previous)
+
 **Rarity pipeline overhaul + variant metadata + card layout**
 
 **Rarity mapping fixed (migrations 007 + 008)**

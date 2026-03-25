@@ -65,3 +65,19 @@ Riftcodex returns the base card's rarity (e.g. "Rare") even for showcase variant
 
 **Rarity badge moved from card art to card info footer**
 Top-right rarity badge on `.tcg-card__art` removed. A footer row with colored dot + rarity name + optional variant chip now lives at the bottom of `.tcg-card__info`. The lightbox retains its own rarity bar separately.
+
+---
+
+## 2026-03-24 (card UI session)
+
+**Power/Health stats deprecated from all card surfaces**
+Stats were noise for a browsing/collection context. Cards now show: art (with price pill) + name + type + footer (rarity dot + rarity name + variant chip). Lightbox shows: art (price pill only) + set label + name + type-line + description + rarity bar. Do not re-add Power/Health unless explicitly requested.
+
+**Card code moved to lightbox rarity bar**
+Was next to the name (collector metadata ≠ primary identity). Now right-aligned in the rarity bar: `● Rare   SFD 020/221`. Set name removed from rarity bar (already shown as `.lightbox__set` label at top). On the card grid, the code stays in the name row (space is limited; muted opacity keeps it secondary).
+
+**Card grid layout uses flex column, not percentage heights**
+`.tcg-card` is now `display: flex; flex-direction: column`. Art uses `aspect-ratio: 3/2.8; flex-shrink: 0` instead of `height: 58%`. Info section uses `flex: 1` to fill remaining height. Type line uses `flex: 1` to absorb slack, pinning the footer to the bottom. This eliminates dead space at any card width. Do not revert to `height: %` on the art — it breaks proportions at varying grid widths.
+
+**`.tcg-card__rarity` CSS classes removed**
+All rarity badge CSS (`--legendary`, `--epic`, `--rare`, `--common`, `--uncommon`, `--showcase`, `--promo`, `--ultimate`) deleted. The art badge was deprecated; these were orphaned. If rarity badges are ever needed again, re-add the CSS — do not assume it exists.

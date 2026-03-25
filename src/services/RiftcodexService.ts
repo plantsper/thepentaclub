@@ -78,6 +78,11 @@ export interface RiftcodexMatch {
     imageUrl?:     string;
     tags:          string[];
     setValidated?: boolean;
+    energy?:       number;
+    supertype?:    string;
+    domains:       string[];
+    flavour?:      string;
+    artist?:       string;
   };
 }
 
@@ -218,13 +223,18 @@ function mapFields(card: RiftcodexCard): Omit<RiftcodexMatch['fields'], 'setVali
   return {
     name:        card.name,
     type,
-    rarityName:  card.classification?.rarity ?? undefined,
-    setName:     card.set?.label             ?? undefined,
-    manaCost:    card.attributes?.energy     ?? undefined,
-    attack:      card.attributes?.might      ?? undefined,
-    defense:     card.attributes?.power      ?? undefined,
-    description: card.text?.plain            ?? undefined,
-    imageUrl:    card.media?.image_url       ?? undefined,
-    tags:        card.tags                   ?? [],
+    rarityName:  card.classification?.rarity     ?? undefined,
+    setName:     card.set?.label                 ?? undefined,
+    manaCost:    card.attributes?.energy         ?? undefined,
+    attack:      card.attributes?.might          ?? undefined,
+    defense:     card.attributes?.power          ?? undefined,
+    description: card.text?.plain                ?? undefined,
+    imageUrl:    card.media?.image_url           ?? undefined,
+    tags:        card.tags                       ?? [],
+    energy:      card.attributes?.energy         ?? undefined,
+    supertype:   card.classification?.supertype  ?? undefined,
+    domains:     card.classification?.domain     ?? [],
+    flavour:     card.text?.flavour              ?? undefined,
+    artist:      card.media?.artist              ?? undefined,
   };
 }

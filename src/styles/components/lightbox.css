@@ -236,6 +236,71 @@
   flex-shrink: 0;
 }
 
+/* ── Domain / tag chips ── */
+
+.lightbox__chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lightbox__domain-chip,
+.lightbox__tag-chip,
+.lightbox__supertype-badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* domain chips: colors applied via inline style */
+
+.lightbox__tag-chip {
+  background: var(--bg-elevated);
+  border-color: var(--border-light);
+  color: var(--text-muted);
+}
+
+.lightbox__supertype-badge {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #fbbf24;
+}
+
+/* ── Card effect label ── */
+
+.lightbox__effect-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: -8px;
+}
+
+/* ── Flavour text ── */
+
+.lightbox__flavour {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-muted);
+  opacity: 0.75;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Artist credit ── */
+
+.lightbox__artist {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
 /* ── Mobile ── */
 
 @media (max-width: 580px) {

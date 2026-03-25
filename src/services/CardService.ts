@@ -37,6 +37,11 @@ interface CardRow {
   art_url: string | null;
   card_set_code: string | null;
   card_code: string | null;
+  energy: number;
+  supertype: string | null;
+  domains: string[];
+  flavour: string | null;
+  artist: string | null;
   card_rarities: RarityRow;
   card_sets: SetRow;
   card_tags: CardTagRow[];
@@ -79,6 +84,11 @@ export async function fetchCards(): Promise<ICard[]> {
     (row.card_tags ?? []).map(ct => ct.tags),
     row.art_url ?? undefined,
     row.card_set_code ?? undefined,
-    row.card_code ?? undefined
+    row.card_code ?? undefined,
+    row.energy ?? 0,
+    row.supertype ?? undefined,
+    row.domains ?? [],
+    row.flavour ?? undefined,
+    row.artist ?? undefined
   ));
 }

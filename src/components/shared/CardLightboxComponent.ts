@@ -2,6 +2,7 @@ import { Component } from '../base/Component';
 import type { ICard, IEventEmitter } from '../../types';
 import { esc, safeUrl } from '../../utils/esc';
 import { variantLabel } from '../../utils/cardVariant';
+import { domainColor } from '../../utils/domainColors';
 
 function safeHex(hex: string): string {
   return /^#[0-9a-fA-F]{3,8}$/.test(hex) ? hex : '#566380';
@@ -88,6 +89,25 @@ export class CardLightboxComponent extends Component {
 
     const rc = safeHex(card.rarity.colorHex);
 
+    // Domain chips — colored per domain using trusted local map
+    const domainChips = (card.domains ?? []).map(d => {
+      const c = domainColor(d);
+      return `<span class="lightbox__domain-chip" style="background:${c}18;border-color:${c}50;color:${c}">${esc(d)}</span>`;
+    }).join('');
+
+    // Tag chips — gray, no color logic
+    const tagChips = (card.tags ?? []).map(t =>
+      `<span class="lightbox__tag-chip">${esc(t.name)}</span>`
+    ).join('');
+
+    const chipsRow = (domainChips || tagChips || card.supertype)
+      ? `<div class="lightbox__chips">
+          ${card.supertype ? `<span class="lightbox__supertype-badge">${esc(card.supertype)}</span>` : ''}
+          ${domainChips}
+          ${tagChips}
+        </div>`
+      : '';
+
     body.innerHTML = `
       <div class="lightbox__set">${esc(card.set.name)}</div>
       <div class="lightbox__name-row">
@@ -97,7 +117,11 @@ export class CardLightboxComponent extends Component {
         <span class="lightbox__type-badge">${esc(card.type)}</span>
         ${variantLabel(card.variant) ? `<span class="lightbox__variant-badge">${esc(variantLabel(card.variant)!)}</span>` : ''}
       </div>
+      ${chipsRow}
+      <div class="lightbox__effect-label">Card Effect</div>
       <p class="lightbox__desc">${esc(card.description)}</p>
+      ${card.flavour ? `<p class="lightbox__flavour">${esc(card.flavour)}</p>` : ''}
+      ${card.artist ? `<div class="lightbox__artist">Art by ${esc(card.artist)}</div>` : ''}
       <div class="lightbox__rarity-bar" style="background:${rc}18;border-color:${rc}40">
         <span class="lightbox__rarity-dot" style="background:${rc}"></span>
         <span style="color:${rc};font-weight:600;font-size:13px">${esc(card.rarity.name)}</span>
