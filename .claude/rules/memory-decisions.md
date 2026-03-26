@@ -84,6 +84,28 @@ All rarity badge CSS (`--legendary`, `--epic`, `--rare`, `--common`, `--uncommon
 
 ---
 
+## 2026-03-25
+
+**`riftcodex_catalog` DB cache (migration 011)**
+Riftcodex metadata (name, type, stats, art, tags) split out of `cards` into `riftcodex_catalog` keyed by `UNIQUE(set_code, collector_num, variant)`. `cards` now holds only collection data + `catalog_id` FK. `card_tags` dropped; tags live on `catalog_tags`. Migration was clean-DB (all cards deleted first).
+
+**Always trust Riftcodex — catalog fields are read-only in the admin form**
+Name, type, description, energy, domains, artist, flavour come from the catalog. Admin form shows them as readonly inputs. No per-card override.
+
+**Catalog-first lookup pattern**
+All import paths use `lookupOrFetch(setCode, numericCollector, variant, fetchFn)`. DB checked first; API only on cache miss. TTL = 30 days. Fuzzy search stays lookup-only (no catalog upsert).
+
+**Admin startup warm path**
+`warmIndexFromCatalog()` called at mount → `setIndexFromCatalog()`. Falls back to full API fetch only if catalog is empty.
+
+**Dual-image lightbox carousel**
+User scan first (`art_url`), Riftcodex CDN art second (`riftcodex_catalog.image_url`). `riftcodex_art_url` column dropped from `cards` in migration 011.
+
+**Rune card format `R01a` + leading zero preservation**
+OCR regex updated to `[a-z]?\d+[a-z*]?`. Numeric lookup: `collectorNum.match(/\d+/)?.[0]`. OCR prompt updated to show `R01a` and `059` examples with explicit leading-zero instruction.
+
+---
+
 ## 2026-03-24 (Riftcodex metadata + UI session)
 
 **Migration 009 — five new columns on `cards`**

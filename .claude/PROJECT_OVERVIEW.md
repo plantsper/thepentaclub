@@ -41,7 +41,9 @@ Riftbound TCG card catalog SPA with a password-protected admin CMS. Vanilla Type
 - Types → `src/types/Card.types.ts`
 - Card class (computed props like `rarityClass`) → `src/models/Card.ts`
 - Supabase fetch query → `src/services/CardService.ts`
-- DB schema → `supabase/migrations/006_add_card_code.sql` (most recent)
+- DB schema → `supabase/migrations/011_riftcodex_catalog.sql` (most recent)
+- Catalog DB cache layer → `src/services/CatalogService.ts`
+- Riftcodex API + in-memory index → `src/services/RiftcodexService.ts`
 
 ### "I need to change the admin / CMS"
 - All admin UI and logic → `src/components/pages/AdminPageComponent.ts`
@@ -81,26 +83,36 @@ Riftbound TCG card catalog SPA with a password-protected admin CMS. Vanilla Type
 ## Data Model (brief)
 
 ```
-Card
-  id, name, type ('Champion'|'Spell'|'Artifact')
-  price (NUMERIC 10,2 — sale price in dollars), attack, defense, description
-  artUrl (Supabase Storage URL), artGradient (CSS fallback)
-  rarity:       { id, name, sortOrder, colorHex }   ← from card_rarities table
-  set:          { id, name, slug, description }      ← from card_sets table
-  tags:         { id, name }[]                       ← via card_tags junction
-  cardSetCode?  string  — Riftbound set abbreviation e.g. 'SFD', 'OGN'
-  cardCode?     string  — Collector number / total with variant suffix
-                          standard:   '170/221'
-                          overnumber: '100/99'
-                          alt-art:    '000a/100'
-                          signature:  '200[*]/199'  (overnumber signature card)
+cards table (collection data only — post migration 011)
+  id, price, art_url, art_gradient
+  rarity_id  → card_rarities(id)
+  set_id     → card_sets(id)
+  catalog_id → riftcodex_catalog(id)   ← all Riftcodex metadata lives here
+  card_set_code, card_code             ← stored per physical card
+
+riftcodex_catalog (Riftcodex metadata cache, keyed by set_code+collector_num+variant)
+  id, set_code, collector_num, variant, fetched_at
+  name, type, energy, supertype, attack, defense, description
+  flavour, artist, domains[], image_url, rarity_name, set_name
+  → catalog_tags → tags (many-to-many)
+
+ICard (TypeScript, flattened view from CardService join)
+  id, name, type, price, attack, defense, description
+  artUrl, artGradient, riftcodexArtUrl
+  rarity: { id, name, sortOrder, colorHex }
+  set: { id, name, slug, description }
+  tags: { id, name }[]
+  cardSetCode?, cardCode?, energy, supertype, domains[], flavour?, artist?
+  variant (derived from cardCode at runtime)
 ```
 
-Stat terminology in UI: `price → $X.XX` (pill badge top-left of card art), `attack → Power`, `defense → Health`.
+`card_tags` is dropped — tags now live on `catalog_tags` (per card type, not per collection item).
 
-`cardCode` and `cardSetCode` are shown beside the card name on all card layouts (grid, catalog, lightbox). They are nullable — existing cards imported before migration 006 will not have them until re-scanned or manually set.
+`riftcodexArtUrl` comes from `riftcodex_catalog.image_url` via join — not stored on `cards` directly.
 
-`price` is always `0.00` after a Riftcodex auto-import — Riftcodex has no pricing data. Set it manually in the admin.
+`cardCode` variants: standard `170/221`, overnumber `100/99`, alt-art `000a/100`, signature `200*/199`, rune `R01a/100`.
+
+`price` is always `0.00` after import — Riftcodex has no pricing data. Set manually in the admin.
 
 ---
 
@@ -138,6 +150,8 @@ Stat terminology in UI: `price → $X.XX` (pill badge top-left of card art), `at
 | Admin account creation | Supabase Studio → Authentication → Users → Add user (no public sign-up) |
 | Adding a field to cards | Update: `ICard` type → `Card` model → `CardService` query → migration → `sampleData.ts` |
 | `price` shows as `$0.00` after bulk import | Riftcodex has no pricing — set price manually in the admin edit form |
-| Card code not showing on existing cards | Migration 006 adds nullable columns — older cards need re-scan or manual entry in the admin form |
-| Collector number regex | `\d+[a-z*]?` — captures standard digits, letter suffix (alt-art), asterisk suffix (signature) |
+| Collector number regex | `[a-z]?\d+[a-z*]?` — optional letter prefix (rune cards R01a), digits, optional letter/asterisk suffix |
+| Card name/type/description missing | These now come from `riftcodex_catalog` via `catalog_id` FK — cards with null `catalog_id` show blank |
+| catalog_id null after import | Means `lookupOrFetch` got no Riftcodex match — check set code + collector number |
+| Catalog TTL | `CATALOG_TTL_DAYS = 30` in `CatalogService.ts` — stale entries re-fetched from API on next import |
 | Homepage stats are hardcoded | `StatsComponent.ts` — not connected to DB (tracked in DEV_NOTES.md #4) |

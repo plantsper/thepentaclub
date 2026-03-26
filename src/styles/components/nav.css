@@ -148,6 +148,26 @@
   flex-direction: column;
   justify-content: center;
   gap: 5px;
+  touch-action: manipulation;
+}
+
+/* ── Mobile nav backdrop ── */
+#navMobileBackdrop {
+  position: fixed;
+  inset: 0;
+  top: 72px;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 99;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+#navMobileBackdrop.open {
+  opacity: 1;
+  pointer-events: all;
 }
 
 .nav__mobile-toggle span {

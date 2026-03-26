@@ -9,6 +9,7 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--transition-med);
+  overscroll-behavior: none;
 }
 
 .lightbox.open {
@@ -185,6 +186,7 @@
   flex-direction: column;
   gap: 14px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .lightbox__set {
@@ -369,6 +371,7 @@
 
   .lightbox__art {
     min-height: 200px;
+    touch-action: pan-y;
   }
 
   .lightbox__body {

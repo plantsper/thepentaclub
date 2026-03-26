@@ -11,6 +11,8 @@ function safeHex(hex: string): string {
 export class CardLightboxComponent extends Component {
   #events: IEventEmitter;
   #previouslyFocused: HTMLElement | null = null;
+  #currentSlide = 0;
+  #totalSlides   = 0;
 
   constructor(container: HTMLElement, events: IEventEmitter) {
     super(container);
@@ -48,6 +50,23 @@ export class CardLightboxComponent extends Component {
       this.#goToSlide(Number(dot.dataset.slide));
     });
 
+    // Carousel swipe gesture (mobile)
+    const artEl = document.getElementById('lightboxArt');
+    if (artEl) {
+      let swipeStartX = 0;
+      artEl.addEventListener('touchstart', (e) => {
+        swipeStartX = e.touches[0].clientX;
+      }, { passive: true });
+      artEl.addEventListener('touchend', (e) => {
+        if (this.#totalSlides <= 1) return;
+        const dx = e.changedTouches[0].clientX - swipeStartX;
+        if (Math.abs(dx) < 40) return;
+        const dir = dx < 0 ? 1 : -1;
+        const next = (this.#currentSlide + dir + this.#totalSlides) % this.#totalSlides;
+        this.#goToSlide(next);
+      }, { passive: true });
+    }
+
     // Focus trap: keep Tab/Shift+Tab inside the dialog while open
     document.querySelector('.lightbox__dialog')?.addEventListener('keydown', (e) => {
       if ((e as KeyboardEvent).key !== 'Tab') return;
@@ -73,6 +92,7 @@ export class CardLightboxComponent extends Component {
   }
 
   #goToSlide(index: number): void {
+    this.#currentSlide = index;
     document.querySelectorAll('.lightbox__slide').forEach((el, i) => {
       el.classList.toggle('lightbox__slide--active', i === index);
     });
@@ -99,6 +119,9 @@ export class CardLightboxComponent extends Component {
     const rcSrc   = safeUrl(card.riftcodexArtUrl ?? '');
     if (userSrc) artImages.push({ src: userSrc, label: 'Your Scan' });
     if (rcSrc)   artImages.push({ src: rcSrc,   label: 'Official Art' });
+
+    this.#totalSlides  = artImages.length;
+    this.#currentSlide = 0;
 
     const priceHtml = `<span class="lightbox__price">$${card.price.toFixed(2)}</span>`;
     const fallbackGradient = card.artGradient;

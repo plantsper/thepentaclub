@@ -1,6 +1,6 @@
 # Infrastructure: The Pentaclub
 
-*Last updated: 2026-03-24. Current state: TypeScript SPA, Supabase backend, Claude vision OCR via Edge Function. Price field replaces mana cost. Admin has bulk-delete and image-drop bulk import. Card code metadata (set abbreviation + collector number with variant suffix) stored per card and shown beside card name in all views.*
+*Last updated: 2026-03-25. Current state: TypeScript SPA, Supabase backend, Claude vision OCR via Edge Function. Riftcodex metadata split into `riftcodex_catalog` cache table (migration 011). `cards` table holds only collection data + `catalog_id` FK. Dual-image lightbox carousel (user scan + Riftcodex art). Rune card format `R01a` supported.*
 
 ---
 
@@ -28,7 +28,8 @@ Browser (Vanilla TS SPA)
   ├── EventEmitter.ts         — pub/sub for card:open events (lightbox)
   ├── CardCollection.ts       — in-memory card store, passed to all components
   │
-  ├── CardService.ts          ──→ Supabase PostgREST (cards + joins)
+  ├── CardService.ts          ──→ Supabase PostgREST (cards + riftcodex_catalog join)
+  ├── CatalogService.ts       ──→ Supabase PostgREST (riftcodex_catalog CRUD + tag sync)
   ├── AuthService.ts          ──→ Supabase Auth
   ├── supabaseClient.ts       — singleton SupabaseClient, reads VITE_ env vars
   │
@@ -39,17 +40,19 @@ Browser (Vanilla TS SPA)
   │                                     └──→ Anthropic API (key stored as secret)
   │
   └── RiftcodexService.ts     ──→ api.riftcodex.com (public, no auth)
+                                  warmIndexFromCatalog() → DB first, API fallback
                                   pre-fetches ~939 cards → in-memory Map index
 
 Supabase (PostgreSQL)
-  ├── cards                   — main card catalog
-  ├── card_rarities           — lookup: Legendary / Epic / Rare / Common
-  ├── card_sets               — lookup: Rift Core / Shattered Realms / Tidal Abyss / Void Expanse
-  ├── tags                    — arbitrary keyword tags
-  └── card_tags               — junction: card ↔ tag (many-to-many)
+  ├── cards                   — collection data only (price, art_url, card_code, catalog_id FK)
+  ├── riftcodex_catalog       — Riftcodex metadata cache, keyed by (set_code, collector_num, variant)
+  ├── catalog_tags            — junction: riftcodex_catalog ↔ tags (replaced card_tags)
+  ├── card_rarities           — lookup: Common / Uncommon / Rare / Epic / Showcase / Promo / Ultimate
+  ├── card_sets               — lookup: Origins / Spiritforged / etc.
+  └── tags                    — arbitrary keyword tags
 
 Supabase Storage
-  └── card-art (public bucket) — card art images, referenced by cards.art_url
+  └── card-art (public bucket) — user scan images, referenced by cards.art_url
 ```
 
 ---
@@ -111,71 +114,82 @@ Migration files live in `supabase/migrations/`. Run them in order in the Supabas
 ```sql
 cards (
   id            UUID          PK default gen_random_uuid()
-  name          TEXT          NOT NULL
-  type          TEXT          NOT NULL  -- 'Champion' | 'Spell' | 'Artifact'
   price         NUMERIC(10,2) NOT NULL DEFAULT 0.00  -- sale price in dollars
-  attack        INTEGER       NOT NULL DEFAULT 0
-  defense       INTEGER       NOT NULL DEFAULT 0
-  description   TEXT          NOT NULL DEFAULT ''
-  art_gradient  TEXT          NOT NULL DEFAULT ''  -- CSS gradient fallback
-  art_url       TEXT                               -- Supabase Storage URL (nullable)
+  art_gradient  TEXT          NOT NULL DEFAULT ''    -- CSS gradient fallback
+  art_url       TEXT                                 -- Supabase Storage user scan URL (nullable)
   rarity_id     INTEGER       FK → card_rarities(id) NOT NULL
   set_id        INTEGER       FK → card_sets(id)     NOT NULL
-  card_set_code TEXT                               -- Riftbound set abbreviation e.g. 'SFD', 'OGN' (nullable)
-  card_code     TEXT                               -- Collector number / total with variant suffix (nullable)
-                                                   --   standard:   '170/221'
-                                                   --   overnumber: '100/99'
-                                                   --   alt-art:    '000a/100'
-                                                   --   signature:  '200[*]/199'
+  catalog_id    UUID          FK → riftcodex_catalog(id) ON DELETE SET NULL
+  card_set_code TEXT                                 -- Riftbound set abbreviation e.g. 'SFD', 'OGN'
+  card_code     TEXT                                 -- Collector number / total with variant suffix
+                                                     --   standard:   '170/221'
+                                                     --   overnumber: '100/99'
+                                                     --   alt-art:    '000a/100'
+                                                     --   signature:  '200*/199'
+                                                     --   rune:       'R01a/100'
   created_at    TIMESTAMPTZ   DEFAULT NOW()
+)
+
+riftcodex_catalog (
+  id            UUID          PK default gen_random_uuid()
+  set_code      TEXT          NOT NULL
+  collector_num INTEGER       NOT NULL               -- stripped numeric only (no prefix/suffix)
+  variant       TEXT          NOT NULL DEFAULT 'standard'
+                                                     -- 'standard'|'overnumber'|'alt-art'|'signature'|'unknown'
+  name, type, rarity_name, set_name
+  energy, supertype, attack, defense, description
+  flavour, artist, domains TEXT[], image_url         -- Riftcodex CDN art URL
+  fetched_at    TIMESTAMPTZ   NOT NULL DEFAULT now()
+  UNIQUE (set_code, collector_num, variant)
+)
+
+catalog_tags (
+  catalog_id UUID    FK → riftcodex_catalog(id) ON DELETE CASCADE
+  tag_id     INTEGER FK → tags(id)              ON DELETE CASCADE
+  PRIMARY KEY (catalog_id, tag_id)
 )
 
 card_rarities (
   id         SERIAL PK
-  name       TEXT   UNIQUE  -- 'Legendary' | 'Epic' | 'Rare' | 'Common'
+  name       TEXT   UNIQUE  -- 'Common'|'Uncommon'|'Rare'|'Epic'|'Showcase'|'Promo'|'Ultimate'
   sort_order INTEGER
-  color_hex  TEXT           -- e.g. '#fbbf24'
+  color_hex  TEXT
 )
 
 card_sets (
   id          SERIAL PK
-  name        TEXT   UNIQUE  -- e.g. 'Rift Core'
-  slug        TEXT   UNIQUE  -- e.g. 'rift-core'
-  released    DATE
-  description TEXT
+  name, slug, description TEXT
 )
 
 tags (
   id   SERIAL PK
-  name TEXT   UNIQUE
-)
-
-card_tags (
-  card_id UUID    FK → cards(id) ON DELETE CASCADE
-  tag_id  INTEGER FK → tags(id)  ON DELETE CASCADE
-  PRIMARY KEY (card_id, tag_id)
+  name TEXT UNIQUE
 )
 ```
 
+Note: `card_tags` was dropped in migration 011. Tags are now on `catalog_tags` (per card type, not per collection item).
+
 ### Row Level Security
 
-All tables have RLS enabled. Policy pattern is consistent across all tables:
-
-| Operation | Policy |
-|---|---|
-| `SELECT` | Public — anyone can read (no auth required) |
-| `INSERT / UPDATE / DELETE` | Authenticated users only (`auth.role() = 'authenticated'`) |
-
-Admin write access is gated by Supabase Auth session only — there is no separate admin role. Any authenticated user can write. This is acceptable for the current single-admin model; revisit before adding multi-user ecommerce.
+All tables have RLS enabled. Public `SELECT`, authenticated `INSERT/UPDATE/DELETE` on all tables.
 
 ### Card query (full join)
 
-`CardService.ts` fetches cards with:
+`CardService.ts` fetches via PostgREST embedded select — `catalog_id` FK resolved automatically:
 
 ```typescript
 supabase
   .from('cards')
-  .select('*, card_rarities(id, name, color_hex), card_sets(id, name, slug), card_tags(tags(id, name))')
+  .select(`
+    id, price, art_gradient, art_url, card_set_code, card_code, catalog_id,
+    card_rarities(id, name, sort_order, color_hex),
+    card_sets(id, name, slug, description),
+    riftcodex_catalog(
+      id, name, type, energy, supertype, attack, defense,
+      description, flavour, artist, domains, image_url,
+      catalog_tags(tags(id, name))
+    )
+  `)
   .order('created_at', { ascending: true })
 ```
 
@@ -273,22 +287,26 @@ Admin selects one image in the add/edit form. Upload and scan run in parallel.
    ├── POST https://api.anthropic.com/v1/messages
    │     model: claude-haiku-4-5-20251001
    │     max_tokens: 64
-   │     Prompt: instructs model to preserve letter/asterisk suffix on collector number
-   └── Returns { raw: "SFD • 170/221" }  (or "SFD • 000a/100" / "SFD • 200[*]/199")
+   │     Prompt: preserve leading zeros (e.g. "059" not "59"), letter prefix (rune "R01a"),
+   │             letter/asterisk suffix (alt-art "000a", signature "200*")
+   └── Returns { raw: "SFD • 059/221" } / "SFD • R01a/100" / "SFD • 200*/199"
 
 4. parseCardCode(raw) → { setCode, collectorNum, cardNumber, variant }
+   Regex captures: optional letter prefix + digits + optional letter/asterisk suffix
+   e.g. "R01a" → collectorNum="R01a", numeric part=1
    Variant detection (CardOcrService.ts):
      - suffix '*'    → 'signature'
      - suffix [a-z]  → 'alt-art'
      - num > total   → 'overnumber'
      - otherwise     → 'standard'
 
-5. RiftcodexService.lookupByCardCode(setCode, collectorNum)
-   ├── buildCardIndex() if not ready — fetches all ~939 cards from api.riftcodex.com
-   └── O(1) Map lookup → RiftcodexCard
+5. CatalogService.lookupOrFetch(setCode, numericCollector, variant, fetchFn)
+   ├── DB cache hit (riftcodex_catalog) → return immediately, no API call
+   ├── Cache miss → fetchFn calls RiftcodexService.lookupByCardCode → upsertCatalog
+   └── Returns { catalogId, entry }   (TTL = 30 days)
 
-6. #applyRiftcodexFields() — populates admin form fields
-   fCardSetCode ← setCode  |  fCardCode ← cardNumber
+6. #applyRiftcodexFields(fields, catalogId) — populates admin form (read-only fields)
+   fCatalogId (hidden) ← catalogId  |  fCardSetCode ← setCode  |  fCardCode ← cardNumber
 ```
 
 **Fallback chain:** If OCR fails → user enters card code manually → "Look up" button triggers step 5 directly. If Riftcodex lookup misses → user fills fields manually.
@@ -302,12 +320,13 @@ Admin drops multiple card photos onto the drop zone. Each image goes through the
    └── Files validated (MIME + 5 MB cap), object URLs created for thumbnails
 
 2. Per image — #handleBulkImport() loop:
-   ├── CardOcrService.extractCardCode(file) → { setCode, collectorNum, cardNumber, variant }
-   ├── RiftcodexService.lookupByCardCode(setCode, collectorNum) → match
-   └── supabase.from('cards').insert([...])  — card_set_code + card_code stored; price defaults to 0.00
+   ├── CardOcrService.extractCardCode(file) → { setCode, collectorNum, cardNumber }
+   ├── Upload scan to Supabase Storage → art_url
+   ├── CatalogService.lookupOrFetch(setCode, numericCollector, variant, fetchFn) → { catalogId, entry }
+   └── supabase.from('cards').insert([{ catalog_id, art_url, rarity_id, set_id, card_code, price: 0 }])
 
 3. Status per item updates live in the queue UI:
-   Pending → Scanning… → Looking up SFD-170… → Added: [name] | not-found | error
+   Pending → Scanning… → Looking up SFD-059… → Uploading scan… → Added: [name] | not-found | error
 ```
 
 **Notes:**
@@ -447,10 +466,11 @@ src/
     CardCollection.ts             — array wrapper with filter helpers
   services/
     supabaseClient.ts             — singleton SupabaseClient
-    CardService.ts                — fetchCards() with full relational join
+    CardService.ts                — fetchCards() with riftcodex_catalog join
+    CatalogService.ts             — DB cache: lookupCatalog, upsertCatalog, lookupOrFetch, warmIndexFromCatalog
     AuthService.ts                — sign in/out, session, password reset
-    CardOcrService.ts             — image → base64 → edge function → parsed card code
-    RiftcodexService.ts           — card index build + lookup + fuzzy search
+    CardOcrService.ts             — image → base64 → edge function → parsed card code (handles R01a, 059)
+    RiftcodexService.ts           — card index: setIndexFromCatalog (DB warm), buildCardIndex (API), lookupByCardCode
     Router.ts                     — hash-based SPA router
     EventEmitter.ts               — typed pub/sub (card:open)
   utils/
@@ -477,6 +497,12 @@ supabase/
     004_relational_schema.sql     — normalised rarities, sets, tags, RLS
     005_mana_cost_to_price.sql    — renames mana_cost → price, widens to NUMERIC(10,2), resets all rows to 0.00
     006_add_card_code.sql         — adds card_set_code TEXT and card_code TEXT (nullable) to cards
+    007_fix_rarities.sql          — renames rarities to match Riftcodex exactly
+    008_add_showcase_promo.sql    — adds Showcase + Promo rarities
+    009_add_riftcodex_fields.sql  — adds energy, supertype, artist, flavour, domains to cards
+    010_add_riftcodex_art_url.sql — adds riftcodex_art_url to cards (superseded by 011)
+    011_riftcodex_catalog.sql     — creates riftcodex_catalog + catalog_tags; adds catalog_id FK;
+                                    drops Riftcodex-sourced columns from cards; drops card_tags
   functions/
     ocr-card/
       index.ts                    — Deno edge function, calls Anthropic API

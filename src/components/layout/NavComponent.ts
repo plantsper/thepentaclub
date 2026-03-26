@@ -16,7 +16,7 @@ export class NavComponent extends Component {
       ? `<a href="#/admin" class="nav__link" data-route="/admin">Admin</a>
          <button class="nav__cta nav__cta--outline" id="navLogout">Logout</button>`
       : `<a href="#/login" class="nav__link nav__link--muted" data-route="/login">Admin</a>
-         <button class="nav__cta" onclick="window.location.hash='#/cards'">Browse Cards</button>`;
+         <button class="nav__cta" id="navBrowse">Browse Cards</button>`;
 
     return `
       <nav class="nav" id="mainNav">
@@ -38,21 +38,21 @@ export class NavComponent extends Component {
   }
 
   afterMount(): void {
-    const toggle = document.getElementById('mobileToggle');
-    toggle?.addEventListener('click', (e) => {
-      this.#mobileOpen = !this.#mobileOpen;
-      (e.currentTarget as HTMLElement).classList.toggle('open', this.#mobileOpen);
-      document.getElementById('navLinks')?.classList.toggle('open', this.#mobileOpen);
+    document.getElementById('mobileToggle')?.addEventListener('click', () => {
+      this.#mobileOpen ? this.#closeMenu() : this.#openMenu();
     });
 
     // Close mobile menu when any nav link is tapped
     document.querySelectorAll<HTMLElement>('#navLinks .nav__link').forEach(link => {
       link.addEventListener('click', () => {
-        if (!this.#mobileOpen) return;
-        this.#mobileOpen = false;
-        toggle?.classList.remove('open');
-        document.getElementById('navLinks')?.classList.remove('open');
+        if (this.#mobileOpen) this.#closeMenu();
       });
+    });
+
+    // Browse Cards CTA — navigate and close menu if open
+    document.getElementById('navBrowse')?.addEventListener('click', () => {
+      window.location.hash = '#/cards';
+      if (this.#mobileOpen) this.#closeMenu();
     });
 
     window.addEventListener('scroll', () => {
@@ -60,6 +60,26 @@ export class NavComponent extends Component {
     });
 
     document.getElementById('navLogout')?.addEventListener('click', () => this.#onLogout());
+  }
+
+  #openMenu(): void {
+    this.#mobileOpen = true;
+    document.getElementById('mobileToggle')?.classList.add('open');
+    document.getElementById('navLinks')?.classList.add('open');
+    const bd = document.createElement('div');
+    bd.id = 'navMobileBackdrop';
+    bd.addEventListener('click', () => this.#closeMenu());
+    document.body.appendChild(bd);
+    requestAnimationFrame(() => bd.classList.add('open'));
+    document.body.style.overflow = 'hidden';
+  }
+
+  #closeMenu(): void {
+    this.#mobileOpen = false;
+    document.getElementById('mobileToggle')?.classList.remove('open');
+    document.getElementById('navLinks')?.classList.remove('open');
+    document.getElementById('navMobileBackdrop')?.remove();
+    document.body.style.overflow = '';
   }
 
   updateActive(route: string): void {

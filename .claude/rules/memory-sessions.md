@@ -4,7 +4,27 @@ Rolling summary — most recent first. Keep last 5 sessions; archive older ones.
 
 ---
 
-## 2026-03-24 (latest)
+## 2026-03-25 (latest)
+
+**`riftcodex_catalog` DB cache refactor + OCR fixes**
+
+**Migration 011** — creates `riftcodex_catalog` + `catalog_tags`; adds `catalog_id` FK to `cards`; drops all Riftcodex-sourced columns from `cards`; drops `card_tags`
+
+**`CatalogService.ts`** — new: `lookupCatalog`, `upsertCatalog`, `lookupOrFetch` (TTL 30 days), `warmIndexFromCatalog`
+
+**`RiftcodexService.ts`** — added `setIndexFromCatalog(entries[])` for DB warm path
+
+**`CardService.ts`** — rewritten SELECT with `riftcodex_catalog(...)` PostgREST embed
+
+**`AdminPageComponent.ts`** — major: `AdminCard` stripped of inline fields + catalog join added; form fields fName/fType readonly; fAttack/fDefense/fDesc/tags removed; fCatalogId hidden added; save payload is collection-only + catalog_id; all lookup paths use `lookupOrFetch`; startup calls `warmIndexFromCatalog`
+
+**OCR fixes**
+- Leading zeros: prompt example `059/221`, explicit "preserve leading zeros" instruction
+- Rune cards (`R01a/100`): prompt updated, `parseCardCode` regex `[a-z]?\d+[a-z*]?`, numeric extraction via `collectorNum.match(/\d+/)?.[0]`
+
+---
+
+## 2026-03-24 (previous)
 
 **Riftcodex metadata + card UI enrichment**
 
@@ -127,13 +147,4 @@ Rolling summary — most recent first. Keep last 5 sessions; archive older ones.
 
 ---
 
-## 2026-03-24 (earlier)
-
-**Bulk image import + CORS fix**
-- Bulk add refactored from textarea to image drop zone: drag-and-drop, per-item queue with thumbnails and live status
-- `#handleBulkImport`: OCR each image → Riftcodex lookup → DB insert, all sequential
-- Riftcodex index checked with `isIndexReady()` after `await buildCardIndex()` — explicit error if still empty
-- Object URL lifecycle: created in `#addBulkFiles`, revoked individually on remove, batch-revoked on panel close
-- CORS fix: `ALLOWED_ORIGIN` secret had trailing slash; edge function now strips it with `.replace(/\/$/, '')`
-- Diagnosed "cards not showing" bug: `App.ts` catch-all swallows `fetchCards()` errors and falls back to sample data — root cause is migration 005 not yet run on production
 
