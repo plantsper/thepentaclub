@@ -90,6 +90,7 @@ export interface RiftcodexMatch {
 
 let _index: Map<string, RiftcodexCard> | null = null;
 let _indexPromise: Promise<void> | null = null;
+let _fullIndexLoaded = false;
 
 function indexKey(setCode: string, collectorNum: number | string): string {
   return `${setCode.toUpperCase()}:${Number(collectorNum)}`;
@@ -154,7 +155,7 @@ export function setIndexFromCatalog(entries: Array<{
  * Prefer warmIndexFromCatalog() first; fall back to this on a cold DB.
  */
 export async function buildCardIndex(): Promise<void> {
-  if (_index) return;
+  if (_fullIndexLoaded) return;
   if (_indexPromise) return _indexPromise;
 
   _indexPromise = (async () => {
@@ -178,6 +179,8 @@ export async function buildCardIndex(): Promise<void> {
         .filter(c => c.set?.set_id && c.collector_number != null)
         .map(c => [indexKey(c.set.set_id, c.collector_number!), c]),
     );
+    _fullIndexLoaded = true;
+    _indexPromise = null;
   })();
 
   return _indexPromise;
@@ -196,6 +199,10 @@ export function lookupByCardCode(setCode: string, collectorNum: number | string)
 
 export function isIndexReady(): boolean {
   return _index !== null;
+}
+
+export function isFullIndexLoaded(): boolean {
+  return _fullIndexLoaded;
 }
 
 // ── Fuzzy name search (fallback) ──────────────────────────────────────────────

@@ -3,7 +3,7 @@ import { getSupabaseClient } from '../../services/supabaseClient';
 import { esc } from '../../utils/esc';
 import { variantFromCardCode, variantLabel } from '../../utils/cardVariant';
 import type { CardVariant } from '../../utils/cardVariant';
-import { buildCardIndex, lookupByCardCode, fuzzySearchCard, isIndexReady } from '../../services/RiftcodexService';
+import { buildCardIndex, lookupByCardCode, fuzzySearchCard, isFullIndexLoaded } from '../../services/RiftcodexService';
 import { warmIndexFromCatalog, lookupOrFetch } from '../../services/CatalogService';
 import type { CatalogEntryInput } from '../../services/CatalogService';
 
@@ -758,9 +758,9 @@ export class AdminPageComponent extends Component {
     try {
       const { extractCardCode } = await import('../../services/CardOcrService');
 
-      if (!isIndexReady()) {
+      if (!isFullIndexLoaded()) {
         await buildCardIndex();
-        if (!isIndexReady()) {
+        if (!isFullIndexLoaded()) {
           // Mark all pending as error
           this.#bulkItems.forEach((_, i) => this.#setQueueItemStatus(i, 'error', 'Index load failed'));
           return;
@@ -922,7 +922,7 @@ export class AdminPageComponent extends Component {
 
       // ── Step 2: Catalog-first lookup (DB → index → API) ──────────────────
       if (setCode && collectorNum) {
-        if (!isIndexReady()) {
+        if (!isFullIndexLoaded()) {
           statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Fetching card index…';
           await buildCardIndex();
         }
@@ -986,7 +986,7 @@ export class AdminPageComponent extends Component {
     statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Looking up card…';
 
     try {
-      if (!isIndexReady()) {
+      if (!isFullIndexLoaded()) {
         statusEl.innerHTML = '<span class="scan-status__spinner"></span>&nbsp;Fetching card index…';
         await buildCardIndex();
       }
@@ -1101,7 +1101,7 @@ export class AdminPageComponent extends Component {
   // Returns the fetchFn expected by lookupOrFetch — uses in-memory index or API
   #makeCatalogFetchFn(variant: CardVariant): (sc: string, cn: number) => Promise<{ entry: CatalogEntryInput; tags: string[] } | null> {
     return async (setCode, collectorNum) => {
-      if (!isIndexReady()) await buildCardIndex();
+      if (!isFullIndexLoaded()) await buildCardIndex();
       const match = lookupByCardCode(setCode, collectorNum);
       if (!match) return null;
       const fields = variant === 'signature'

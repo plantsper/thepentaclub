@@ -20,9 +20,16 @@
 .lightbox__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(6, 10, 16, 0.88);
+  background: rgba(6, 10, 16, 0.72);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+
+/* Blur page content behind the lightbox */
+body.lightbox-open #app > *:not(#lightboxMount) {
+  filter: blur(6px) brightness(0.85);
+  transition: filter var(--transition-med);
+  pointer-events: none;
 }
 
 .lightbox__dialog {

@@ -13,6 +13,7 @@ export class CardLightboxComponent extends Component {
   #previouslyFocused: HTMLElement | null = null;
   #currentSlide = 0;
   #totalSlides   = 0;
+  #savedScrollY  = 0;
 
   constructor(container: HTMLElement, events: IEventEmitter) {
     super(container);
@@ -201,7 +202,11 @@ export class CardLightboxComponent extends Component {
     `;
 
     lightbox.classList.add('open');
-    document.body.style.overflow = 'hidden';
+    this.#savedScrollY = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top      = `-${this.#savedScrollY}px`;
+    document.body.style.width    = '100%';
+    document.body.classList.add('lightbox-open');
 
     // Move focus into the dialog and remember where it came from
     this.#previouslyFocused = document.activeElement as HTMLElement;
@@ -211,7 +216,11 @@ export class CardLightboxComponent extends Component {
 
   #close(): void {
     document.getElementById('cardLightbox')?.classList.remove('open');
-    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.top      = '';
+    document.body.style.width    = '';
+    document.body.classList.remove('lightbox-open');
+    window.scrollTo(0, this.#savedScrollY);
     this.#previouslyFocused?.focus();
     this.#previouslyFocused = null;
   }
